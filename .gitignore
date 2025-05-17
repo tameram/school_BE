@@ -1,0 +1,13 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# SQLite DB
+db.sqlite3
+
+# VS Code settings (optional)
+.vscode/
+
+# Migrations (optional, if you don't want to track them initially)
+*/migrations/*.py
+*/migrations/__pycache__/
