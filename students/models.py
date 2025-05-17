@@ -1,12 +1,14 @@
 from django.db import models
 import uuid
 from accounts.models import Account
+from employees.models import Employee
+
 
 
 class SchoolClass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
-    # teacher = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)  # future
+    teacher = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
 
     def __str__(self):
         return self.name
@@ -19,7 +21,7 @@ class Bus(models.Model):
     capacity = models.PositiveIntegerField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     manager_name = models.CharField(max_length=100, null=True, blank=True)
-    # driver = ForeignKey(User)  # will be added in future
+    driver = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="buses")
 
     def __str__(self):
         return f"{self.name} ({self.bus_number})"
