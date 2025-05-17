@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     StudentListCreateView, StudentRetrieveUpdateView,
     SchoolClassListCreateView, SchoolClassRetrieveUpdateView,
-    StudentHistoryListCreateView, StudentHistoryDetailView
+    StudentHistoryListCreateView, StudentHistoryDetailView,
+    BusListCreateView, BusRetrieveUpdateView
 )
 
 urlpatterns = [
@@ -14,5 +15,8 @@ urlpatterns = [
 
      path('student-history/', StudentHistoryListCreateView.as_view(), name='student-history-list-create'),
     path('student-history/<uuid:id>/', StudentHistoryDetailView.as_view(), name='student-history-detail'),
+
+    path('buses/', BusListCreateView.as_view(), name='bus-list-create'),
+    path('buses/<uuid:id>/', BusRetrieveUpdateView.as_view(), name='bus-detail-update'),
 
 ]

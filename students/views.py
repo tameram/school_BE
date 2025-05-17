@@ -1,8 +1,18 @@
 from rest_framework import generics
-from .models import Student, SchoolClass, StudentHistory
-from .serializers import StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer, StudentHistorySerializer
+from .models import Student, SchoolClass, StudentHistory, Bus
+from .serializers import StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer, StudentHistorySerializer, BusSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+
+
+class BusListCreateView(generics.ListCreateAPIView):
+    queryset = Bus.objects.all()
+    serializer_class = BusSerializer
+
+class BusRetrieveUpdateView(generics.RetrieveUpdateAPIView):
+    queryset = Bus.objects.all()
+    serializer_class = BusSerializer
+    lookup_field = 'id'
 
 class StudentListCreateView(generics.ListCreateAPIView):
     queryset = Student.objects.all()
