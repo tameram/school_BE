@@ -1,7 +1,9 @@
 from rest_framework import generics
-from .models import Employee
+from .models import Employee, EmployeeHistory
 from django_filters.rest_framework import DjangoFilterBackend
-from .serializers import EmployeeSerializer
+from .serializers import EmployeeSerializer, EmployeeHistorySerializer
+from rest_framework import viewsets
+
 
 class EmployeeListCreateView(generics.ListCreateAPIView):
     queryset = Employee.objects.all()
@@ -18,3 +20,9 @@ class EmployeeListCreateView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['employee_type']
+
+class EmployeeHistoryViewSet(viewsets.ModelViewSet):
+    queryset = EmployeeHistory.objects.all()
+    serializer_class = EmployeeHistorySerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['employee']
