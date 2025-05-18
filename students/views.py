@@ -1,15 +1,23 @@
 from rest_framework import generics
 from .models import Student, SchoolClass, StudentHistory, Bus
-from .serializers import StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer, StudentHistorySerializer, BusSerializer
+from .serializers import StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer, StudentHistorySerializer, BusSerializer, BusCreateSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import serializers
 
-
+def get_serializer_class(self):
+    if self.request.method == 'POST':
+        return BusCreateSerializer
+    return BusSerializer
 class BusListCreateView(generics.ListCreateAPIView):
-    queryset = Bus.objects.all()
-    serializer_class = BusSerializer
+    queryset = Bus.objects.select_related('driver').all()
 
-class BusRetrieveUpdateView(generics.RetrieveUpdateAPIView):
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return BusCreateSerializer
+        return BusSerializer
+
+class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Bus.objects.all()
     serializer_class = BusSerializer
     lookup_field = 'id'
@@ -27,9 +35,18 @@ class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
     lookup_field = 'id'
 
 
+class SchoolClassCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolClass
+        fields = ['id', 'name', 'teacher']
+
 class SchoolClassListCreateView(generics.ListCreateAPIView):
     queryset = SchoolClass.objects.all()
-    serializer_class = SchoolClassListSerializer
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return SchoolClassCreateSerializer
+        return SchoolClassListSerializer
 
 class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateAPIView):
     queryset = SchoolClass.objects.all()
