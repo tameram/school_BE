@@ -57,7 +57,9 @@ class Payment(models.Model):
     receive_id = models.CharField(max_length=100, null=True, blank=True)
     
     authorized_payer = models.ForeignKey(AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True)
-    payment_type = models.ForeignKey(PaymentType, on_delete=models.SET_NULL, null=True, blank=True)
+    payment_type = models.CharField(max_length=100, null=True, blank=True)
+    type = models.CharField(max_length=100, null=True, blank=True)
+    cheque = models.ForeignKey('ChequeDetail', on_delete=models.SET_NULL, null=True, blank=True)
     
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255, null=True, blank=True)

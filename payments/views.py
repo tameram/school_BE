@@ -7,6 +7,8 @@ from .serializers import (
     PaymentSerializer, RecipientSerializer
 )
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.parsers import MultiPartParser, FormParser
+
 
 class PaymentTypeViewSet(viewsets.ModelViewSet):
     queryset = PaymentType.objects.all()
@@ -24,8 +26,7 @@ class ChequeDetailViewSet(viewsets.ModelViewSet):
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['recipient_employee', 'recipient_bus', 'recipient_authorized']
+    parser_classes = (MultiPartParser, FormParser)
 
 
 class RecipientViewSet(viewsets.ModelViewSet):
