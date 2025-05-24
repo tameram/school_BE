@@ -1,18 +1,17 @@
 from django.db import models
 import uuid
-from accounts.models import Account
-from employees.models import Employee
 
 
 
 class SchoolClass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
-    teacher = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
+    teacher = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
 
     def __str__(self):
         return self.name
-    
+
+
 class Bus(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
@@ -21,25 +20,27 @@ class Bus(models.Model):
     capacity = models.PositiveIntegerField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     manager_name = models.CharField(max_length=100, null=True, blank=True)
-    driver = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="buses")
+    driver = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name="buses")
 
     def __str__(self):
         return f"{self.name} ({self.bus_number})"
+
+
 class Student(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='students', null=True, blank=True)
+    account = models.ForeignKey('accounts.Account', on_delete=models.CASCADE, related_name='students', null=True, blank=True)
 
     student_id = models.CharField(max_length=50, null=True, blank=True)
     first_name = models.CharField(max_length=100, null=True, blank=True)
     second_name = models.CharField(max_length=100, null=True, blank=True)
-    gender = models.CharField(max_length=10, null=True, blank=True)  # e.g., 'Male', 'Female', etc.
+    gender = models.CharField(max_length=10, null=True, blank=True)
     birthdate = models.DateField(null=True, blank=True)
-    school_class = models.ForeignKey(SchoolClass, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    school_class = models.ForeignKey('students.SchoolClass', on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     date_of_registration = models.DateField(null=True, blank=True)
     is_archived = models.BooleanField(default=False, null=True, blank=True)
 
     is_bus_joined = models.BooleanField(null=True, blank=True)
-    bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    bus = models.ForeignKey('students.Bus', on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
 
     parent_name = models.CharField(max_length=255, null=True, blank=True)
     parent_phone = models.CharField(max_length=20, null=True, blank=True)
@@ -52,9 +53,10 @@ class Student(models.Model):
     def __str__(self):
         return f"{self.first_name} {self.second_name or ''}".strip()
 
+
 class StudentHistory(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='history')
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='history')
     event = models.CharField(max_length=255, null=True, blank=True)
     note = models.TextField(null=True, blank=True)
     date = models.DateField(null=True, blank=True)
@@ -63,5 +65,3 @@ class StudentHistory(models.Model):
 
     def __str__(self):
         return f"{self.student} - {self.event}"
-
-
