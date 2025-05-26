@@ -1,4 +1,6 @@
 from django.urls import path
+
+from students.serializers import SchoolClassRetrieveUpdateDeleteView
 from .views import (
     StudentListCreateView, StudentRetrieveUpdateView,
     SchoolClassListCreateView, SchoolClassRetrieveUpdateView,
@@ -11,7 +13,7 @@ urlpatterns = [
     path('<uuid:id>/', StudentRetrieveUpdateView.as_view(), name='student-detail-update'),
 
     path('classes/', SchoolClassListCreateView.as_view(), name='class-list-create'),
-    path('classes/<uuid:id>/', SchoolClassRetrieveUpdateView.as_view(), name='class-detail-update'),
+    path('classes/<uuid:id>/', SchoolClassRetrieveUpdateDeleteView.as_view(), name='class-detail-update-delete'),
 
      path('student-history/', StudentHistoryListCreateView.as_view(), name='student-history-list-create'),
     path('student-history/<uuid:id>/', StudentHistoryDetailView.as_view(), name='student-history-detail'),

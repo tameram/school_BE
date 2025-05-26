@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Student, SchoolClass, StudentHistory, Bus
+from rest_framework import generics
 
 
 class StudentHistorySerializer(serializers.ModelSerializer):
@@ -65,3 +66,8 @@ class BusCreateSerializer(serializers.ModelSerializer):
             'id', 'name', 'bus_number', 'bus_type',
             'capacity', 'phone_number', 'manager_name', 'driver'
         ]
+
+class SchoolClassRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):  # ✅ allow DELETE
+    queryset = SchoolClass.objects.all()
+    serializer_class = SchoolClassDetailSerializer
+    lookup_field = 'id'
