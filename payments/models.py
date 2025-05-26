@@ -79,7 +79,7 @@ class Recipient(models.Model):
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     school_fee = models.ForeignKey(SchoolFee, on_delete=models.SET_NULL, null=True, blank=True)
-    payment_type = models.ForeignKey(PaymentType, on_delete=models.SET_NULL, null=True, blank=True)
+    payment_type = models.CharField(max_length=100, null=True, blank=True)
     
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()

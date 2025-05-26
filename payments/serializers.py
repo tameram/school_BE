@@ -56,6 +56,14 @@ class PaymentSerializer(serializers.ModelSerializer):
         return payment
 
 class RecipientSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Recipient
-        fields = '__all__'
+        fields = '__all__'  # or list them explicitly
+        # Optionally: exclude `student` if you don't want both ID and name
+
+    def get_student_name(self, obj):
+        if obj.student:
+            return f"{obj.student.first_name} {obj.student.second_name}".strip()
+        return "غير معروف"
