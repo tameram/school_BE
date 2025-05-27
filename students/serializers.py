@@ -13,16 +13,22 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = '__all__'
 
+class StudentBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = ['id', 'first_name', 'second_name', 'student_id', 'school_class']
+
 class BusSerializer(serializers.ModelSerializer):
     student_count = serializers.SerializerMethodField()
-    driver_name = serializers.SerializerMethodField()  # ✅ Add this line
+    driver_name = serializers.SerializerMethodField()
+    students = StudentBasicSerializer(many=True, read_only=True)
 
     class Meta:
         model = Bus
         fields = [
             'id', 'name', 'bus_number', 'bus_type',
             'capacity', 'phone_number', 'manager_name',
-            'student_count', 'driver_name'
+            'student_count', 'driver_name', 'students' 
         ]
 
     def get_student_count(self, obj):
