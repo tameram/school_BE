@@ -1,5 +1,6 @@
 from django.db import models
 import uuid
+from django.db.models import Q
 
 class EmployeeType(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -36,4 +37,13 @@ class SchoolFee(models.Model):
             return f"Fees for {self.student}"
         elif self.school_class:
             return f"Fees for class {self.school_class}"
-        return "General Fee"
+        return "Default School Fees"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school_class', 'student'],
+                name='unique_fee_per_student_or_class',
+                condition=Q(school_class__isnull=True, student__isnull=True)  # only one default allowed
+            )
+        ]
