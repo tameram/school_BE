@@ -6,6 +6,7 @@ import uuid
 class SchoolClass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     teacher = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
 
     def __str__(self):
@@ -21,6 +22,7 @@ class Bus(models.Model):
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     manager_name = models.CharField(max_length=100, null=True, blank=True)
     driver = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name="buses")
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.name} ({self.bus_number})"
@@ -49,6 +51,8 @@ class Student(models.Model):
     note = models.TextField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True)
+
 
     def __str__(self):
         return f"{self.first_name} {self.second_name or ''}".strip()

@@ -1,8 +1,10 @@
 from rest_framework import generics
 from .models import Student, SchoolClass, StudentHistory, Bus
+from rest_framework.generics import RetrieveUpdateAPIView
 from .serializers import StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer, StudentHistorySerializer, BusSerializer, BusCreateSerializer
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import serializers
 from datetime import date
 
@@ -12,6 +14,9 @@ def get_serializer_class(self):
     return BusSerializer
 class BusListCreateView(generics.ListCreateAPIView):
     queryset = Bus.objects.select_related('driver').all()
+
+    def get_queryset(self):
+        return Bus.objects.filter(students__account=self.request.user.account).distinct()
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -29,11 +34,22 @@ class StudentListCreateView(generics.ListCreateAPIView):
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['is_archived', 'account']
     ordering_fields = ['date_of_registration']
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Student.objects.filter(account_id=self.request.user.account_id)
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user.account)
 
 class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
     queryset = Student.objects.all()
     serializer_class = StudentSerializer
+    permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+
+    def get_queryset(self):
+        return Student.objects.filter(account=self.request.user.account)
 
     def perform_update(self, serializer):
         student = self.get_object()
@@ -42,7 +58,7 @@ class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
         old_bus_join = student.is_bus_joined
 
         # Save the updated student
-        updated_student = serializer.save()
+        updated_student = serializer.save(account=self.request.user.account)
 
         # Log history if class changed
         if old_class != updated_student.school_class:
