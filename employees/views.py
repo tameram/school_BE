@@ -31,11 +31,11 @@ class EmployeeRetrieveUpdateView(generics.RetrieveUpdateAPIView):
         serializer.save(account=self.request.user.account)
 
 
-class EmployeeListCreateView(generics.ListCreateAPIView):
-    queryset = Employee.objects.all()
-    serializer_class = EmployeeSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['employee_type']
+# class EmployeeListCreateView(generics.ListCreateAPIView):
+#     queryset = Employee.objects.all()
+#     serializer_class = EmployeeSerializer
+#     filter_backends = [DjangoFilterBackend]
+#     filterset_fields = ['employee_type']
 
 class EmployeeHistoryViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeHistorySerializer
