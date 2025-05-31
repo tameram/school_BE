@@ -54,6 +54,11 @@ class PaymentSerializer(serializers.ModelSerializer):
             payment.save()
 
         return payment
+    
+class SimplePaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'number', 'amount', 'date', 'reason']
 
 class RecipientSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()

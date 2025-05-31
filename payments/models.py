@@ -60,7 +60,8 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255, null=True, blank=True)
 
-    recipient_employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
+    recipient_employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments'
+)
     recipient_bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True,
     related_name='payments')
     recipient_authorized = models.ForeignKey(
