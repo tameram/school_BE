@@ -15,8 +15,14 @@ def get_serializer_class(self):
 class BusListCreateView(generics.ListCreateAPIView):
     queryset = Bus.objects.select_related('driver').all()
 
+    def perform_create(self, serializer):
+        serializer.save(
+            account=self.request.user.account,
+            created_by=self.request.user
+        )
+
     def get_queryset(self):
-        return Bus.objects.filter(students__account=self.request.user.account).distinct()
+        return Bus.objects.filter(account=self.request.user.account)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -27,6 +33,12 @@ class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Bus.objects.all()
     serializer_class = BusSerializer
     lookup_field = 'id'
+
+    def get_queryset(self):
+        return Bus.objects.filter(account=self.request.user.account)
+
+    def perform_update(self, serializer):
+        serializer.save(account=self.request.user.account)
 
 class StudentListCreateView(generics.ListCreateAPIView):
     queryset = Student.objects.all()
@@ -95,6 +107,15 @@ class SchoolClassCreateSerializer(serializers.ModelSerializer):
 class SchoolClassListCreateView(generics.ListCreateAPIView):
     queryset = SchoolClass.objects.all()
 
+    def get_queryset(self):
+        return SchoolClass.objects.filter(account=self.request.user.account)
+    
+    def perform_create(self, serializer):
+        serializer.save(
+            account=self.request.user.account,
+            created_by=self.request.user
+        )
+
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return SchoolClassCreateSerializer
@@ -108,6 +129,9 @@ class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateAPIView):
 class StudentHistoryListCreateView(generics.ListCreateAPIView):
     queryset = StudentHistory.objects.all()
     serializer_class = StudentHistorySerializer
+
+    def get_queryset(self):
+        return StudentHistory.objects.filter(student__account=self.request.user.account)
 
 class StudentHistoryDetailView(generics.RetrieveAPIView):
     queryset = StudentHistory.objects.all()

@@ -18,7 +18,8 @@ class StudentSerializer(serializers.ModelSerializer):
     school_fees = serializers.SerializerMethodField()
     class Meta:
         model = Student
-        fields = '__all__'
+        exclude = ['account']  # ✅ This ensures DRF doesn't try to validate it as input
+        read_only_fields = ['id']
 
     def validate_student_id(self, value):
         if not value:
@@ -103,6 +104,7 @@ class BusCreateSerializer(serializers.ModelSerializer):
             'id', 'name', 'bus_number', 'bus_type',
             'capacity', 'phone_number', 'manager_name', 'driver'
         ]
+        read_only_fields = ['id']
 
 class SchoolClassRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):  # ✅ allow DELETE
     queryset = SchoolClass.objects.all()

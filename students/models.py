@@ -1,5 +1,6 @@
 from django.db import models
 import uuid
+from users.models import Account, CustomUser
 
 
 
@@ -7,6 +8,8 @@ class SchoolClass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='classes', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
     teacher = models.ForeignKey('employees.Employee', on_delete=models.SET_NULL, null=True, blank=True, related_name="classes")
 
     def __str__(self):
@@ -18,6 +21,8 @@ class Bus(models.Model):
     name = models.CharField(max_length=100, null=True, blank=True)
     bus_number = models.CharField(max_length=50, null=True, blank=True)
     bus_type = models.CharField(max_length=100, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='buses', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
     capacity = models.PositiveIntegerField(null=True, blank=True)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     manager_name = models.CharField(max_length=100, null=True, blank=True)
@@ -30,7 +35,7 @@ class Bus(models.Model):
 
 class Student(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    account = models.ForeignKey('accounts.Account', on_delete=models.CASCADE, related_name='students', null=True, blank=True)
+    account = models.ForeignKey('users.Account', on_delete=models.CASCADE, related_name='students', null=True, blank=True)
 
     student_id = models.CharField(max_length=50, null=True, blank=True)
     first_name = models.CharField(max_length=100, null=True, blank=True)
