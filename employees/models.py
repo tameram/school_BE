@@ -1,5 +1,6 @@
 from django.db import models
 from settings_data.models import EmployeeType
+from users.models import Account, CustomUser
 import uuid
 
 class Employee(models.Model):
@@ -23,6 +24,10 @@ class Employee(models.Model):
     is_archived = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='employees', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"

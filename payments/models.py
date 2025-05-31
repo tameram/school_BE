@@ -7,6 +7,7 @@ from settings_data.models import SchoolFee, AuthorizedPayer
 from employees.models import Employee
 from utils.services import get_next_number
 from django.db import IntegrityError, transaction
+from users.models import Account, CustomUser
 
 
 class PaymentType(models.Model):
@@ -20,6 +21,8 @@ class PaymentType(models.Model):
     name = models.CharField(max_length=50, unique=True, null=True, blank=True)
     display_name = models.CharField(max_length=100, null=True, blank=True)
     type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.display_name} ({self.type})"
@@ -51,6 +54,8 @@ class Payment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     number = models.PositiveIntegerField(unique=True, null=True, blank=True)
     receive_id = models.CharField(max_length=100, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, related_name="payments")
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     authorized_payer = models.ForeignKey(AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True)
     payment_type = models.CharField(max_length=100, null=True, blank=True)
@@ -88,6 +93,8 @@ class Payment(models.Model):
 class Recipient(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     number = models.PositiveIntegerField(unique=True, null=True, blank=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, null=True, blank=True, related_name="recipients")
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     school_fee = models.ForeignKey(SchoolFee, on_delete=models.SET_NULL, null=True, blank=True)

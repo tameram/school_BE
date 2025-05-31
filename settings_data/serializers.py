@@ -14,4 +14,4 @@ class AuthorizedPayerSerializer(serializers.ModelSerializer):
 class SchoolFeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolFee
-        fields = '__all__'
+        exclude = ['account', 'created_by']

@@ -24,10 +24,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     target_name = serializers.SerializerMethodField()
     class Meta:
         model = Payment
-        fields = '__all__'  # or list each field if preferred
-        extra_kwargs = {
-            'id': {'read_only': True}
-        }
+        exclude = ['account', 'created_by']
     
     def get_target_name(self, obj):
         if obj.payment_type == 'متفرقات':

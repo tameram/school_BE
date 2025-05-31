@@ -1,11 +1,14 @@
 from django.db import models
 import uuid
 from django.db.models import Q
+from users.models import Account, CustomUser  # ✅ assuming you have these models
 
 class EmployeeType(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     display_value = models.CharField(max_length=100)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='employee_types', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.display_value
@@ -15,6 +18,8 @@ class AuthorizedPayer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     display_value = models.CharField(max_length=100)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='authorized_payers', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.display_value
@@ -33,6 +38,9 @@ class SchoolFee(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     year = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='school_fees', null=True, blank=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
     def __str__(self):
         if self.student:
             return f"Fees for {self.student}"
@@ -43,8 +51,8 @@ class SchoolFee(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['school_class', 'student'],
-                name='unique_fee_per_student_or_class',
-                condition=Q(school_class__isnull=True, student__isnull=True)  # only one default allowed
+                fields=['school_class', 'student', 'account'],
+                name='unique_fee_per_student_or_class_per_account',
+                condition=Q(school_class__isnull=True, student__isnull=True)  # Only one default per account
             )
         ]

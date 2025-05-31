@@ -11,8 +11,13 @@ from rest_framework.parsers import MultiPartParser, FormParser
 
 
 class PaymentTypeViewSet(viewsets.ModelViewSet):
-    queryset = PaymentType.objects.all()
     serializer_class = PaymentTypeSerializer
+
+    def get_queryset(self):
+        return PaymentType.objects.filter(account=self.request.user.account)
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user.account, created_by=self.request.user)
 
 class BankTransferDetailViewSet(viewsets.ModelViewSet):
     queryset = BankTransferDetail.objects.all()
@@ -24,13 +29,29 @@ class ChequeDetailViewSet(viewsets.ModelViewSet):
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
-    queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     parser_classes = (MultiPartParser, FormParser)
 
+    def get_queryset(self):
+        return Payment.objects.filter(account=self.request.user.account)
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user.account, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(account=self.request.user.account)
+
 
 class RecipientViewSet(viewsets.ModelViewSet):
-    queryset = Recipient.objects.all()
     serializer_class = RecipientSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['student', 'school_fee', 'payment_type']
+
+    def get_queryset(self):
+        return Recipient.objects.filter(account=self.request.user.account)
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user.account, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(account=self.request.user.account)
