@@ -1,9 +1,13 @@
+# payments/models.py
+
 import uuid
 from django.db import models
 from students.models import Student, Bus
-from settings_data.models import SchoolFee
-from settings_data.models import AuthorizedPayer
+from settings_data.models import SchoolFee, AuthorizedPayer
 from employees.models import Employee
+from utils.services import get_next_number
+from django.db import IntegrityError, transaction
+
 
 class PaymentType(models.Model):
     PAYMENT_TYPE_CHOICES = [
@@ -13,10 +17,8 @@ class PaymentType(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
     name = models.CharField(max_length=50, unique=True, null=True, blank=True)
     display_name = models.CharField(max_length=100, null=True, blank=True)
-    
     type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, null=True, blank=True)
 
     def __str__(self):
@@ -24,10 +26,6 @@ class PaymentType(models.Model):
 
 
 class BankTransferDetail(models.Model):
-    """
-    Details for a bank‐transfer payment.
-    Linked later to a Payment record.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bank_number = models.CharField(max_length=20, null=True, blank=True)
     branch_number = models.CharField(max_length=20, null=True, blank=True)
@@ -38,9 +36,6 @@ class BankTransferDetail(models.Model):
 
 
 class ChequeDetail(models.Model):
-    """
-    Details for a cheque payment.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     bank_number = models.CharField(max_length=20, null=True, blank=True)
     branch_number = models.CharField(max_length=20, null=True, blank=True)
@@ -50,39 +45,60 @@ class ChequeDetail(models.Model):
 
     def __str__(self):
         return f"Cheque {self.id} ({self.cheque_date})"
-    
+
 
 class Payment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    number = models.PositiveIntegerField(unique=True, null=True, blank=True)
     receive_id = models.CharField(max_length=100, null=True, blank=True)
-    
+
     authorized_payer = models.ForeignKey(AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True)
     payment_type = models.CharField(max_length=100, null=True, blank=True)
     type = models.CharField(max_length=100, null=True, blank=True)
     cheque = models.ForeignKey('ChequeDetail', on_delete=models.SET_NULL, null=True, blank=True)
-    
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255, null=True, blank=True)
 
     recipient_employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
-    recipient_bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True)
-    recipient_authorized = models.ForeignKey(AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True, related_name='recipient_payments')
+    recipient_bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True,
+    related_name='payments')
+    recipient_authorized = models.ForeignKey(
+        AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True, related_name='recipient_payments'
+    )
 
     date = models.DateField()
 
+    def save(self, *args, **kwargs):
+        if self.number is None:
+            for attempt in range(5):  # retry up to 5 times
+                try:
+                    with transaction.atomic():
+                        self.number = get_next_number('payment', start=10000000)
+                        super().save(*args, **kwargs)
+                    break
+                except IntegrityError:
+                    # Retry with new number
+                    continue
     def __str__(self):
-        return f"Payment {self.id} - {self.amount}"
+        return f"Payment #{self.number} - {self.amount}"
 
 
 class Recipient(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    number = models.PositiveIntegerField(unique=True, null=True, blank=True)
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     school_fee = models.ForeignKey(SchoolFee, on_delete=models.SET_NULL, null=True, blank=True)
     payment_type = models.CharField(max_length=100, null=True, blank=True)
-    
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
 
+    def save(self, *args, **kwargs):
+        if self.number is None:
+            self.number = get_next_number('recipient', start=20000000)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Recipient {self.id} - {self.amount} from {self.student}"
+        return f"Recipient #{self.number} - {self.amount} from {self.student}"

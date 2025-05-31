@@ -31,6 +31,7 @@ class SchoolFee(models.Model):
     clothes_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    year = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
     def __str__(self):
         if self.student:

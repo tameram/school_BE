@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'students',
     'employees',
     'settings_data',
+    'utils',
     'payments',
 
 ]
