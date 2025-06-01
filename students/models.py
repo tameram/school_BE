@@ -74,3 +74,17 @@ class StudentHistory(models.Model):
 
     def __str__(self):
         return f"{self.student} - {self.event}"
+
+
+class StudentPaymentHistory(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='payment_history')
+    year = models.CharField(max_length=20)  # e.g., "20/21"
+    total_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    fees_snapshot = models.JSONField(null=True, blank=True)
+    payments_snapshot = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.student} - {self.year}"

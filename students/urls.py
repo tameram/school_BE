@@ -5,7 +5,7 @@ from .views import (
     StudentListCreateView, StudentRetrieveUpdateView,
     SchoolClassListCreateView, SchoolClassRetrieveUpdateView,
     StudentHistoryListCreateView, StudentHistoryDetailView,
-    BusListCreateView, BusRetrieveUpdateView
+    BusListCreateView, BusRetrieveUpdateView, close_student_account
 )
 
 urlpatterns = [
@@ -20,5 +20,8 @@ urlpatterns = [
 
     path('buses/', BusListCreateView.as_view(), name='bus-list-create'),
     path('buses/<uuid:id>/', BusRetrieveUpdateView.as_view(), name='bus-detail'),
+
+    path('close-account/<uuid:id>/', close_student_account, name='close-student-account'),
+
 
 ]

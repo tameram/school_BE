@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import EmployeeType, AuthorizedPayer, SchoolFee
+from .models import EmployeeType, AuthorizedPayer, SchoolFee, SchoolYear
 
 class EmployeeTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,3 +15,8 @@ class SchoolFeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolFee
         exclude = ['account', 'created_by']
+
+class SchoolYearSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolYear
+        fields = ['id', 'label', 'is_active']

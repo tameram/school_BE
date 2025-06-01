@@ -35,11 +35,39 @@ class StudentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("هذا الطالب موجود بالفعل في النظام")
         return value
     
-    def get_school_fees(self, obj):
-        # Get distinct SchoolFee objects linked via Recipient
-        fees = SchoolFee.objects.filter(recipient__student=obj).distinct()
-        return SchoolFeeSerializer(fees, many=True).data
+    def get_school_fees(self, student):
+        fee = SchoolFee.objects.filter(student=student).first()
+        if fee:
+            return {
+                'school_fee': fee.school_fee,
+                'books_fee': fee.books_fee,
+                'trans_fee': fee.trans_fee,
+                'clothes_fee': fee.clothes_fee,
+                'id': fee.id
+            }
 
+        if student.school_class:
+            fee = SchoolFee.objects.filter(student__isnull=True, school_class=student.school_class).first()
+            if fee:
+                return {
+                    'school_fee': fee.school_fee,
+                    'books_fee': fee.books_fee,
+                    'trans_fee': fee.trans_fee,
+                    'clothes_fee': fee.clothes_fee,
+                    'id': fee.id
+                }
+
+        fee = SchoolFee.objects.filter(student__isnull=True, school_class__isnull=True, account=student.account).first()
+        if fee:
+            return {
+                'school_fee': fee.school_fee,
+                'books_fee': fee.books_fee,
+                'trans_fee': fee.trans_fee,
+                'clothes_fee': fee.clothes_fee,
+                'id': fee.id
+            }
+
+        return None
 
 
 

@@ -1,9 +1,10 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from .models import EmployeeType, AuthorizedPayer, SchoolFee
-from .serializers import EmployeeTypeSerializer, AuthorizedPayerSerializer, SchoolFeeSerializer
+from .models import EmployeeType, AuthorizedPayer, SchoolFee, SchoolYear
+from .serializers import EmployeeTypeSerializer, AuthorizedPayerSerializer, SchoolFeeSerializer, SchoolYearSerializer
 from logs.utils import log_activity
+from rest_framework.permissions import IsAuthenticated
 
 class EmployeeTypeViewSet(viewsets.ModelViewSet):
     queryset = EmployeeType.objects.all()
@@ -59,6 +60,16 @@ class AuthorizedPayerViewSet(viewsets.ModelViewSet):
             related_id=str(instance.id)
         )
         instance.delete()
+
+class SchoolYearViewSet(viewsets.ModelViewSet):
+    serializer_class = SchoolYearSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = SchoolYear.objects.all()
+    def get_queryset(self):
+        return SchoolYear.objects.filter(account=self.request.user.account, is_active=True)
+
+    def perform_create(self, serializer):
+        serializer.save(account=self.request.user.account, created_by=self.request.user)
 
 
 class SchoolFeeViewSet(viewsets.ModelViewSet):

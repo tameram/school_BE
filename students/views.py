@@ -5,12 +5,19 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from datetime import date
 
-from .models import Student, SchoolClass, StudentHistory, Bus
+from .models import Student, SchoolClass, StudentHistory, Bus,StudentPaymentHistory
 from .serializers import (
     StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer,
     StudentHistorySerializer, BusSerializer, BusCreateSerializer
 )
 from logs.utils import log_activity
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from payments.models import Recipient
+from settings_data.models import SchoolFee, SchoolYear
+from django.db.models import Sum
 
 
 class BusListCreateView(generics.ListCreateAPIView):
@@ -170,3 +177,55 @@ class StudentHistoryDetailView(generics.RetrieveAPIView):
     queryset = StudentHistory.objects.all()
     serializer_class = StudentHistorySerializer
     lookup_field = 'id'
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def close_student_account(request, id):
+    student = Student.objects.get(id=id, account=request.user.account)
+    year_label = request.data.get("year")
+
+    # Get or create the school year
+    school_year, _ = SchoolYear.objects.get_or_create(
+        label=year_label,
+        account=request.user.account,
+        defaults={'created_by': request.user}
+    )
+
+    # Update all current payments to link them with this year
+    payments_qs = Recipient.objects.filter(student=student, school_year__isnull=True)
+    payments_qs.update(school_year=school_year)
+
+    # Get serialized copy of payments
+    payments = list(payments_qs.values())
+    for p in payments:
+        p["id"] = str(p["id"])
+        p["student"] = str(p["student"])
+        p["school_fee"] = str(p["school_fee"]) if p["school_fee"] else None
+
+    # Get student-level school fee
+    fee = SchoolFee.objects.filter(student=student).first()
+    fee_data = None
+    if fee:
+        fee_data = {
+            "school_fee": fee.school_fee,
+            "books_fee": fee.books_fee,
+            "trans_fee": fee.trans_fee,
+            "clothes_fee": fee.clothes_fee,
+        }
+        fee.delete()
+
+    total_paid = payments_qs.aggregate(Sum("amount"))["amount__sum"] or 0
+
+    # Save to payment history
+    StudentPaymentHistory.objects.create(
+        student=student,
+        year=year_label,
+        total_paid=total_paid,
+        fees_snapshot=fee_data,
+        payments_snapshot=payments,
+        created_by=request.user
+    )
+
+    return Response({"message": "تم تسكير الحساب بنجاح"}, status=status.HTTP_200_OK)
+
