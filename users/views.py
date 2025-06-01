@@ -7,10 +7,31 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Account
 from .serializers import AccountUpdateSerializer
+from logs.utils import log_activity
 
 
 class CustomLoginView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+
+        response = super().post(request, *args, **kwargs)
+
+        user = serializer.user  # ✅ use this instead of self.user
+
+        if response.status_code == 200 and hasattr(user, 'account'):
+            log_activity(
+                user=user,
+                account=user.account,
+                note="تسجيل دخول المستخدم"
+            )
+        return response
 
 class CustomTokenView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer

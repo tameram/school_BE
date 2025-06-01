@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'settings_data',
     'utils',
     'payments',
+    'logs',
 
 ]
 

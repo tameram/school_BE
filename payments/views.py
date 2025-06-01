@@ -1,13 +1,16 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.parsers import MultiPartParser, FormParser
 from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
 from .serializers import (
     PaymentTypeSerializer,
     BankTransferDetailSerializer,
     ChequeDetailSerializer,
-    PaymentSerializer, RecipientSerializer
+    PaymentSerializer,
+    RecipientSerializer
 )
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.parsers import MultiPartParser, FormParser
+from logs.utils import log_activity
 
 
 class PaymentTypeViewSet(viewsets.ModelViewSet):
@@ -17,11 +20,18 @@ class PaymentTypeViewSet(viewsets.ModelViewSet):
         return PaymentType.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        serializer.save(account=self.request.user.account, created_by=self.request.user)
+        instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
+        log_activity(self.request.user, self.request.user.account, f"تم إنشاء نوع دفعة {instance.name}", 'PaymentType', str(instance.id))
+
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, self.request.user.account, f"تم حذف نوع دفعة {instance.name}", 'PaymentType', str(instance.id))
+        instance.delete()
+
 
 class BankTransferDetailViewSet(viewsets.ModelViewSet):
     queryset = BankTransferDetail.objects.all()
     serializer_class = BankTransferDetailSerializer
+
 
 class ChequeDetailViewSet(viewsets.ModelViewSet):
     queryset = ChequeDetail.objects.all()
@@ -36,10 +46,16 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return Payment.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        serializer.save(account=self.request.user.account, created_by=self.request.user)
+        instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
+        log_activity(self.request.user, self.request.user.account, f"تم إنشاء دفعة بمبلغ {instance.amount}", 'Payment', str(instance.id))
 
     def perform_update(self, serializer):
-        serializer.save(account=self.request.user.account)
+        instance = serializer.save(account=self.request.user.account)
+        log_activity(self.request.user, self.request.user.account, f"تم تعديل دفعة بمبلغ {instance.amount}", 'Payment', str(instance.id))
+
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, self.request.user.account, f"تم حذف دفعة بمبلغ {instance.amount}", 'Payment', str(instance.id))
+        instance.delete()
 
 
 class RecipientViewSet(viewsets.ModelViewSet):
@@ -51,7 +67,13 @@ class RecipientViewSet(viewsets.ModelViewSet):
         return Recipient.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        serializer.save(account=self.request.user.account, created_by=self.request.user)
+        instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
+        log_activity(self.request.user, self.request.user.account, f"تم إنشاء سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
 
     def perform_update(self, serializer):
-        serializer.save(account=self.request.user.account)
+        instance = serializer.save(account=self.request.user.account)
+        log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
+
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, self.request.user.account, f"تم حذف سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
+        instance.delete()
