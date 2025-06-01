@@ -103,6 +103,8 @@ class Recipient(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     date = models.DateField()
 
+    received = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
         if self.number is None:
             self.number = get_next_number('recipient', start=20000000)
