@@ -8,7 +8,10 @@ class Account(models.Model):
     email = models.EmailField(null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     school_name = models.CharField(max_length=255, null=True, blank=True)
-    logo = models.ImageField(upload_to='logos/', null=True, blank=True)  # Requires MEDIA setup
+    logo = models.ImageField(upload_to='logos/', null=True, blank=True)
+    start_school_date = models.DateField(null=True, blank=True)  # ✅ NEW
+    end_school_date = models.DateField(null=True, blank=True)    # ✅ NEW
+    join_date = models.DateField(null=True, blank=True)    # ✅ NEW
     is_active = models.BooleanField(default=True)
 
     def __str__(self):

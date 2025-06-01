@@ -9,6 +9,8 @@ class EmployeeType(models.Model):
     display_value = models.CharField(max_length=100)
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='employee_types', null=True, blank=True)
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    is_teacher = models.BooleanField(default=False, null=True, blank=True)
+    is_driver = models.BooleanField(default=False, null=True, blank=True)
 
     def __str__(self):
         return self.display_value

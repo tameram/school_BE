@@ -2,8 +2,20 @@ from datetime import datetime, time, timezone
 from pytz import timezone as pytz_timezone, UTC
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import logging
+from rest_framework import serializers
+from .models import CustomUser
+from .models import Account
 
 logger = logging.getLogger(__name__)
+
+
+class AccountUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = [
+            'school_name', 'phone_number', 'email',
+            'address', 'logo', 'start_school_date', 'end_school_date'
+        ]
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -50,3 +62,12 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'logo': account.logo.url if account.logo else None,
         }
         return data
+    
+class MeSerializer(serializers.ModelSerializer):
+    account = AccountUpdateSerializer()
+
+    class Meta:
+        model = CustomUser
+        fields = ['id', 'username', 'email', 'role', 'account']
+
+
