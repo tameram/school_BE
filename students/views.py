@@ -19,6 +19,9 @@ from payments.models import Recipient
 from settings_data.models import SchoolFee, SchoolYear
 from django.db.models import Sum
 
+from decimal import Decimal
+from uuid import UUID
+
 
 class BusListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
@@ -198,10 +201,13 @@ def close_student_account(request, id):
 
     # Get serialized copy of payments
     payments = list(payments_qs.values())
+
     for p in payments:
-        p["id"] = str(p["id"])
-        p["student"] = str(p["student"])
-        p["school_fee"] = str(p["school_fee"]) if p["school_fee"] else None
+        for k, v in p.items():
+            if isinstance(v, UUID):
+                p[k] = str(v)
+            elif isinstance(v, Decimal):
+                p[k] = float(v)
 
     # Get student-level school fee
     fee = SchoolFee.objects.filter(student=student).first()
