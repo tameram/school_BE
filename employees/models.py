@@ -43,3 +43,19 @@ class EmployeeHistory(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.event} ({self.date})"
+    
+class EmployeeVirtualTransaction(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='virtual_transactions')
+    date = models.DateField()
+    type = models.CharField(max_length=100, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    direction = models.CharField(max_length=10, choices=[('credit', 'له'), ('debit', 'عليه')], null=True, blank=True)
+    reason = models.CharField(max_length=255, null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    account = models.ForeignKey(Account, on_delete=models.CASCADE)
+    created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.type} - {self.amount} ({self.date})"
