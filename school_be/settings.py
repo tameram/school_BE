@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     'utils',
     'payments',
     'logs',
+    'inventory',
 
 ]
 
