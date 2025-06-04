@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import MultiPartParser, FormParser
 from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
@@ -11,6 +12,8 @@ from .serializers import (
     RecipientSerializer
 )
 from logs.utils import log_activity
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 
 
 class PaymentTypeViewSet(viewsets.ModelViewSet):
@@ -32,6 +35,14 @@ class BankTransferDetailViewSet(viewsets.ModelViewSet):
     queryset = BankTransferDetail.objects.all()
     serializer_class = BankTransferDetailSerializer
 
+
+
+class NotReceivedRecipientList(ListAPIView):
+    serializer_class = RecipientSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return Recipient.objects.filter(account=user.account, received=False)
 
 class ChequeDetailViewSet(viewsets.ModelViewSet):
     queryset = ChequeDetail.objects.all()
@@ -66,14 +77,29 @@ class RecipientViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Recipient.objects.filter(account=self.request.user.account)
 
+    def handle_cheque_data(self, request):
+        cheque_fields = ['bank_number', 'branch_number', 'account_number', 'cheque_date']
+        cheque_data = {f: request.data.get(f'cheque_details.{f}') for f in cheque_fields}
+        if any(cheque_data.values()):
+            cheque = ChequeDetail.objects.create(**cheque_data)
+            if 'cheque_details.cheque_image' in request.FILES:
+                cheque.cheque_image = request.FILES['cheque_details.cheque_image']
+                cheque.save()
+            return cheque
+        return None
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def not_received(self, request):
+        queryset = self.get_queryset().filter(received=False)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     def perform_create(self, serializer):
-        instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
+        cheque = self.handle_cheque_data(self.request)
+        instance = serializer.save(account=self.request.user.account, created_by=self.request.user, cheque=cheque)
         log_activity(self.request.user, self.request.user.account, f"تم إنشاء سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
 
     def perform_update(self, serializer):
-        instance = serializer.save(account=self.request.user.account)
+        cheque = self.handle_cheque_data(self.request)
+        instance = serializer.save(account=self.request.user.account, cheque=cheque)
         log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
-
-    def perform_destroy(self, instance):
-        log_activity(self.request.user, self.request.user.account, f"تم حذف سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
-        instance.delete()

@@ -43,6 +43,7 @@ class ChequeDetail(models.Model):
     bank_number = models.CharField(max_length=20, null=True, blank=True)
     branch_number = models.CharField(max_length=20, null=True, blank=True)
     account_number = models.CharField(max_length=30, null=True, blank=True)
+    cheque_number = models.CharField(max_length=30, null=True, blank=True)
     cheque_date = models.DateField(null=True, blank=True)
     cheque_image = models.ImageField(upload_to='cheques/', null=True, blank=True)
 
@@ -99,6 +100,8 @@ class Recipient(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     school_fee = models.ForeignKey(SchoolFee, on_delete=models.SET_NULL, null=True, blank=True)
     payment_type = models.CharField(max_length=100, null=True, blank=True)
+    cheque = models.ForeignKey(ChequeDetail, on_delete=models.SET_NULL, null=True, blank=True, related_name="recipients")
+
     school_year = models.ForeignKey(
         'settings_data.SchoolYear',
         on_delete=models.SET_NULL,

@@ -59,13 +59,33 @@ class SimplePaymentSerializer(serializers.ModelSerializer):
 
 class RecipientSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
+    student_id = serializers.SerializerMethodField()
+    parent_name = serializers.SerializerMethodField()
+    parent_phone = serializers.SerializerMethodField()
+    class_name = serializers.SerializerMethodField()
+    cheque = ChequeDetailSerializer(read_only=True)
 
     class Meta:
         model = Recipient
-        fields = '__all__'  # or list them explicitly
-        # Optionally: exclude `student` if you don't want both ID and name
+        fields = '__all__'  # Includes all model fields + custom fields below
+        # OR explicitly: ['id', 'amount', 'date', ..., 'student_name', 'student_id', 'parent_name', 'parent_phone', 'class_name', 'cheque']
 
     def get_student_name(self, obj):
         if obj.student:
             return f"{obj.student.first_name} {obj.student.second_name}".strip()
         return "غير معروف"
+
+    def get_student_id(self, obj):
+        return obj.student.student_id if obj.student else None
+
+    def get_parent_name(self, obj):
+        return obj.student.parent_name if obj.student else None
+
+    def get_parent_phone(self, obj):
+        return obj.student.parent_phone if obj.student else None
+
+    def get_class_name(self, obj):
+        if obj.student and obj.student.school_class:
+            return obj.student.school_class.name
+        return None
+   
