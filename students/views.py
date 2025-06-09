@@ -145,6 +145,46 @@ class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
             )
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def students_with_open_accounts(request):
+    account = request.user.account
+    active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+    if not active_year:
+        return Response({"detail": "لا توجد سنة دراسية مفعلة."}, status=status.HTTP_400_BAD_REQUEST)
+
+    students = Student.objects.filter(account=account, is_archived=False)
+    open_students = []
+
+    for student in students:
+        # Check if student closed account for current year
+        is_closed = StudentPaymentHistory.objects.filter(student=student, year=active_year.label).exists()
+        if is_closed:
+            continue  # skip
+
+        # Calculate total paid
+        total_paid = Recipient.objects.filter(student=student, school_year=active_year).aggregate(Sum('amount'))['amount__sum'] or 0
+
+        # Find the applicable fee
+        fee = SchoolFee.objects.filter(student=student, school_year=active_year).first()
+        if not fee and student.school_class:
+            fee = SchoolFee.objects.filter(school_class=student.school_class, student__isnull=True, school_year=active_year).first()
+        if not fee:
+            fee = SchoolFee.objects.filter(school_class__isnull=True, student__isnull=True, school_year=active_year).first()
+
+        total_fee = sum([
+            fee.school_fee or 0,
+            fee.books_fee or 0,
+            fee.trans_fee or 0,
+            fee.clothes_fee or 0,
+        ]) if fee else 0
+
+        if total_paid < total_fee:
+            open_students.append(student)
+
+    serializer = StudentSerializer(open_students, many=True)
+    return Response(serializer.data)
+
 class SchoolClassListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         return SchoolClass.objects.filter(account=self.request.user.account)
