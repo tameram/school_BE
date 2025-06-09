@@ -19,4 +19,5 @@ class SchoolFeeSerializer(serializers.ModelSerializer):
 class SchoolYearSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolYear
-        fields = ['id', 'label', 'is_active']
+        fields = ['id', 'label', 'is_active', 'start_date', 'end_date']
+

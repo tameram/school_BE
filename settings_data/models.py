@@ -33,6 +33,8 @@ class SchoolYear(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="school_years")
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
         return self.label

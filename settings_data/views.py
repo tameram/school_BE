@@ -6,6 +6,7 @@ from .serializers import EmployeeTypeSerializer, AuthorizedPayerSerializer, Scho
 from logs.utils import log_activity
 from rest_framework.permissions import IsAuthenticated
 
+
 class EmployeeTypeViewSet(viewsets.ModelViewSet):
     queryset = EmployeeType.objects.all()
     serializer_class = EmployeeTypeSerializer
@@ -70,6 +71,11 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(account=self.request.user.account, created_by=self.request.user)
+
+    @action(detail=False, methods=['patch'], url_path='deactivate')
+    def deactivate_all(self, request):
+        SchoolYear.objects.filter(account=request.user.account, is_active=True).update(is_active=False)
+        return Response({"detail": "Deactivated previous active years"})
 
 
 class SchoolFeeViewSet(viewsets.ModelViewSet):
