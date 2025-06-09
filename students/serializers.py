@@ -5,7 +5,9 @@ from .models import Student, SchoolClass, StudentHistory, Bus
 from rest_framework import generics
 from payments.models import Recipient
 from settings_data.serializers import SchoolFeeSerializer
-from settings_data.models import SchoolFee
+from settings_data.models import SchoolYear, SchoolFee
+from django.db import models
+
 
 
 class StudentHistorySerializer(serializers.ModelSerializer):
@@ -17,6 +19,7 @@ class StudentSerializer(serializers.ModelSerializer):
     recipients = RecipientSerializer(many=True, read_only=True, source='recipient_set')
     school_fees = serializers.SerializerMethodField()
     school_fees_by_year = serializers.SerializerMethodField()
+    payment_summary = serializers.SerializerMethodField()
     class Meta:
         model = Student
         exclude = ['account']  # ✅ This ensures DRF doesn't try to validate it as input
@@ -47,6 +50,34 @@ class StudentSerializer(serializers.ModelSerializer):
                 "school_year": str(f.school_year.id) if f.school_year else None
             } for f in fees
         ]
+    
+    def get_payment_summary(self, student):
+        active_year = SchoolYear.objects.filter(account=student.account, is_active=True).first()
+        if not active_year:
+            return None
+
+        # Get total paid in current year
+        total_paid = Recipient.objects.filter(
+            student=student, school_year=active_year
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+
+        # Get fee for current year
+        school_fee = SchoolFee.objects.filter(student=student, school_year=active_year).first()
+
+        # Fallback to class-level or default fee
+        if not school_fee and student.school_class:
+            school_fee = SchoolFee.objects.filter(school_class=student.school_class, student__isnull=True, school_year=active_year).first()
+        if not school_fee:
+            school_fee = SchoolFee.objects.filter(school_class__isnull=True, student__isnull=True, school_year=active_year).first()
+
+        total_fee = sum([
+            school_fee.school_fee or 0,
+            school_fee.books_fee or 0,
+            school_fee.trans_fee or 0,
+            school_fee.clothes_fee or 0
+        ]) if school_fee else 0
+
+        return f"{total_paid}/{total_fee}"
     
     def get_school_fees(self, student):
         fee = SchoolFee.objects.filter(student=student).first()
