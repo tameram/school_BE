@@ -16,6 +16,7 @@ class StudentSerializer(serializers.ModelSerializer):
     history = StudentHistorySerializer(many=True, read_only=True)
     recipients = RecipientSerializer(many=True, read_only=True, source='recipient_set')
     school_fees = serializers.SerializerMethodField()
+    school_fees_by_year = serializers.SerializerMethodField()
     class Meta:
         model = Student
         exclude = ['account']  # ✅ This ensures DRF doesn't try to validate it as input
@@ -34,6 +35,18 @@ class StudentSerializer(serializers.ModelSerializer):
             if Student.objects.filter(student_id=value).exclude(id=self.instance.id).exists():
                 raise serializers.ValidationError("هذا الطالب موجود بالفعل في النظام")
         return value
+    
+    def get_school_fees_by_year(self, student):
+        fees = SchoolFee.objects.filter(student=student)
+        return [
+            {
+                "school_fee": f.school_fee,
+                "books_fee": f.books_fee,
+                "trans_fee": f.trans_fee,
+                "clothes_fee": f.clothes_fee,
+                "school_year": str(f.school_year.id) if f.school_year else None
+            } for f in fees
+        ]
     
     def get_school_fees(self, student):
         fee = SchoolFee.objects.filter(student=student).first()
