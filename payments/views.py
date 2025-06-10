@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import MultiPartParser, FormParser
+from settings_data.models import SchoolYear
 from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
 from .serializers import (
     PaymentTypeSerializer,
@@ -75,7 +76,17 @@ class RecipientViewSet(viewsets.ModelViewSet):
     filterset_fields = ['student', 'school_fee', 'payment_type']
 
     def get_queryset(self):
-        return Recipient.objects.filter(account=self.request.user.account)
+        account = self.request.user.account
+        queryset = Recipient.objects.filter(account=account)
+
+        # Dynamic filtering for `?school_year=current`
+        school_year_param = self.request.query_params.get('school_year')
+        if school_year_param == 'current':
+            active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+            if active_year:
+                queryset = queryset.filter(school_year=active_year)
+
+        return queryset
 
     def handle_cheque_data(self, request):
         cheque_fields = ['bank_number', 'branch_number', 'account_number', 'cheque_date']
