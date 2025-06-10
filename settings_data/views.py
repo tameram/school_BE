@@ -1,10 +1,14 @@
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
+
+from students.models import Student
 from .models import EmployeeType, AuthorizedPayer, SchoolFee, SchoolYear
 from .serializers import EmployeeTypeSerializer, AuthorizedPayerSerializer, SchoolFeeSerializer, SchoolYearSerializer
 from logs.utils import log_activity
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField
+
 
 
 class EmployeeTypeViewSet(viewsets.ModelViewSet):
@@ -67,10 +71,40 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = SchoolYear.objects.all()
     def get_queryset(self):
-        return SchoolYear.objects.filter(account=self.request.user.account, is_active=True)
+        return SchoolYear.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        serializer.save(account=self.request.user.account, created_by=self.request.user)
+    # 1. Create the new school year
+        school_year = serializer.save(account=self.request.user.account, created_by=self.request.user)
+
+        # 2. Get the default school fee
+        default_fee = SchoolFee.objects.filter(
+            account=self.request.user.account,
+            school_class__isnull=True,
+            student__isnull=True
+        ).first()
+
+        if not default_fee:
+            return  # No default to apply
+
+        # 3. Get all non-archived students
+        students = Student.objects.filter(account=self.request.user.account, is_archived=False)
+
+        # 4. Bulk create school fee records for those students
+        fees_to_create = []
+        for student in students:
+            fees_to_create.append(SchoolFee(
+                student=student,
+                school_year=school_year,
+                school_fee=default_fee.school_fee,
+                books_fee=default_fee.books_fee,
+                trans_fee=default_fee.trans_fee,
+                clothes_fee=default_fee.clothes_fee,
+                account=self.request.user.account,
+                created_by=self.request.user
+            ))
+
+        SchoolFee.objects.bulk_create(fees_to_create)
 
     @action(detail=False, methods=['patch'], url_path='deactivate')
     def deactivate_all(self, request):
@@ -115,6 +149,33 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
 
+    @action(detail=False, methods=['get'], url_path='current-year-total')
+    def current_year_total(self, request):
+        account = request.user.account
+
+        active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+        if not active_year:
+            return Response({"detail": "لا يوجد سنة دراسية مفعلة حالياً"}, status=404)
+
+        # Get non-archived student IDs
+        student_ids = Student.objects.filter(is_archived=False).values_list('id', flat=True)
+
+        # Expression to calculate total fee per row
+        total_fee_expr = ExpressionWrapper(
+            F('school_fee') + F('books_fee') + F('trans_fee') + F('clothes_fee'),
+            output_field=DecimalField()
+        )
+
+        # Filter fees and sum total of all rows
+        total = (
+            SchoolFee.objects
+            .filter(account=account, school_year=active_year, student__in=student_ids)
+            .annotate(total_fee=total_fee_expr)
+            .aggregate(total_sum=Sum('total_fee'))
+        )
+
+        return Response({"total_school_fees": total['total_sum'] or 0})
+
     @action(detail=False, methods=['get', 'put'], url_path='default')
     def default_fee(self, request):
         if request.method == 'GET':
@@ -124,7 +185,6 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                 return Response(serializer.data)
             except SchoolFee.DoesNotExist:
                 return Response({"detail": "No default fee found."}, status=404)
-
         if request.method == 'PUT':
             fee, _ = SchoolFee.objects.get_or_create(
                 account=request.user.account,
@@ -144,3 +204,4 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                 )
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+

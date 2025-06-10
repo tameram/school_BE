@@ -55,7 +55,17 @@ class PaymentViewSet(viewsets.ModelViewSet):
     parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
-        return Payment.objects.filter(account=self.request.user.account)
+        account = self.request.user.account
+        queryset = Payment.objects.filter(account=account)
+
+        # Filter by current school year
+        school_year_param = self.request.query_params.get('school_year')
+        if school_year_param == 'current':
+            active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+            if active_year:
+                queryset = queryset.filter(date__gte=active_year.start_date, date__lte=active_year.end_date)
+
+        return queryset
 
     def perform_create(self, serializer):
         instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
