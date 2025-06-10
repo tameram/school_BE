@@ -5,6 +5,8 @@ import logging
 from rest_framework import serializers
 from .models import CustomUser
 from .models import Account
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
 
 logger = logging.getLogger(__name__)
 
@@ -69,5 +71,26 @@ class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ['id', 'username', 'email', 'role', 'account']
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField()
+
+    def validate(self, data):
+        try:
+            uid = urlsafe_base64_decode(data['uid']).decode()
+            user = CustomUser.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, CustomUser.DoesNotExist):
+            raise serializers.ValidationError("الرابط غير صالح")
+
+        if not default_token_generator.check_token(user, data['token']):
+            raise serializers.ValidationError("رمز إعادة التعيين غير صالح أو منتهي الصلاحية")
+
+        user.set_password(data['new_password'])
+        user.save()
+        return data
+    
 
 

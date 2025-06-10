@@ -8,6 +8,7 @@ from rest_framework import status
 from .models import Account
 from .serializers import AccountUpdateSerializer
 from logs.utils import log_activity
+from rest_framework import serializers
 
 
 class CustomLoginView(TokenObtainPairView):
@@ -63,4 +64,24 @@ class MeView(APIView):
     def get(self, request):
         serializer = MeSerializer(request.user)
         return Response(serializer.data)
+    
+
+class PasswordResetSerializer(serializers.Serializer):
+    new_password = serializers.CharField()
+
+    def validate_new_password(self, value):
+        if len(value) < 8 or not any(c.isdigit() for c in value) or not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على رقم وحرف")
+        return value
+
+class AuthenticatedPasswordResetView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        if serializer.is_valid():
+            request.user.set_password(serializer.validated_data['new_password'])
+            request.user.save()
+            return Response({"message": "تم تغيير كلمة المرور بنجاح"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
