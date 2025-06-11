@@ -63,6 +63,14 @@ class Payment(models.Model):
     type = models.CharField(max_length=100, null=True, blank=True)
     cheque = models.ForeignKey('ChequeDetail', on_delete=models.SET_NULL, null=True, blank=True)
 
+    school_year = models.ForeignKey(
+        'settings_data.SchoolYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payments"
+    )
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255, null=True, blank=True)
 

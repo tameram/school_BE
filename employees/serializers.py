@@ -1,6 +1,11 @@
 from rest_framework import serializers
+from datetime import date
+from django.db.models import Sum
+
 from .models import Employee, EmployeeHistory, EmployeeVirtualTransaction
+from payments.models import Payment
 from payments.serializers import PaymentSerializer, SimplePaymentSerializer
+
 
 
 class EmployeeHistorySerializer(serializers.ModelSerializer):
@@ -24,6 +29,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     
     is_teacher = serializers.SerializerMethodField()
     is_driver = serializers.SerializerMethodField()
+    total_paid_this_month = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
@@ -34,5 +40,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def get_is_driver(self, obj):
         return obj.employee_type.is_driver if obj.employee_type else False
+    
+    def get_total_paid_this_month(self, obj):
+        today = date.today()
+        return Payment.objects.filter(
+            recipient_employee=obj,
+            date__year=today.year,
+            date__month=today.month,
+            account=obj.account
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
 
 

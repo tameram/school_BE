@@ -58,13 +58,11 @@ class PaymentViewSet(viewsets.ModelViewSet):
         account = self.request.user.account
         queryset = Payment.objects.filter(account=account)
 
-        # Filter by current school year
         school_year_param = self.request.query_params.get('school_year')
         if school_year_param == 'current':
             active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
             if active_year:
-                queryset = queryset.filter(date__gte=active_year.start_date, date__lte=active_year.end_date)
-
+                queryset = queryset.filter(school_year=active_year)
         return queryset
 
     def perform_create(self, serializer):
