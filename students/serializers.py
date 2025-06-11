@@ -54,7 +54,7 @@ class StudentSerializer(serializers.ModelSerializer):
     def get_payment_summary(self, student):
         active_year = SchoolYear.objects.filter(account=student.account, is_active=True).first()
         if not active_year:
-            return None
+            return {'total_paid': 0, 'total_fee': 0}
 
         # Get total paid in current year
         total_paid = Recipient.objects.filter(
@@ -66,9 +66,17 @@ class StudentSerializer(serializers.ModelSerializer):
 
         # Fallback to class-level or default fee
         if not school_fee and student.school_class:
-            school_fee = SchoolFee.objects.filter(school_class=student.school_class, student__isnull=True, school_year=active_year).first()
+            school_fee = SchoolFee.objects.filter(
+                school_class=student.school_class,
+                student__isnull=True,
+                school_year=active_year
+            ).first()
         if not school_fee:
-            school_fee = SchoolFee.objects.filter(school_class__isnull=True, student__isnull=True, school_year=active_year).first()
+            school_fee = SchoolFee.objects.filter(
+                school_class__isnull=True,
+                student__isnull=True,
+                school_year=active_year
+            ).first()
 
         total_fee = sum([
             school_fee.school_fee or 0,
@@ -77,7 +85,11 @@ class StudentSerializer(serializers.ModelSerializer):
             school_fee.clothes_fee or 0
         ]) if school_fee else 0
 
-        return f"{total_paid}/{total_fee}"
+        return {
+            'total_paid': total_paid,
+            'total_fee': total_fee
+        }
+
     
     def get_school_fees(self, student):
         fee = SchoolFee.objects.filter(student=student).first()
