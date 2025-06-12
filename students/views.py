@@ -200,7 +200,7 @@ class SchoolClassListCreateView(generics.ListCreateAPIView):
         )
 
     def get_serializer_class(self):
-        return SchoolClassCreateSerializer if self.request.method == 'POST' else SchoolClassListSerializer
+        return SchoolClassListSerializer if self.request.method == 'POST' else SchoolClassListSerializer
 
 
 class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateAPIView):
