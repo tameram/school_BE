@@ -5,7 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from datetime import date
 
-from .models import Student, SchoolClass, StudentHistory, Bus,StudentPaymentHistory
+from .models import Student, SchoolClass, StudentHistory, Bus, StudentPaymentHistory
 from .serializers import (
     StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer,
     StudentHistorySerializer, BusSerializer, BusCreateSerializer
@@ -148,42 +148,101 @@ class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def students_with_open_accounts(request):
+    """
+    Returns students with unpaid fees. 
+    Gracefully handles cases where no active school year exists.
+    """
     account = request.user.account
-    active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
-    if not active_year:
-        return Response({"detail": "لا توجد سنة دراسية مفعلة."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        # Try to get the active school year
+        active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+        
+        if not active_year:
+            # If no active year exists, return empty result instead of error
+            # This allows the frontend to load without breaking
+            return Response({
+                "message": "لا توجد سنة دراسية مفعلة حالياً",
+                "students": [],
+                "has_active_year": False
+            }, status=status.HTTP_200_OK)
 
-    students = Student.objects.filter(account=account, is_archived=False)
-    open_students = []
+        students = Student.objects.filter(account=account, is_archived=False)
+        open_students = []
 
-    for student in students:
-        # Check if student closed account for current year
-        is_closed = StudentPaymentHistory.objects.filter(student=student, year=active_year.label).exists()
-        if is_closed:
-            continue  # skip
+        for student in students:
+            try:
+                # Check if student closed account for current year
+                is_closed = StudentPaymentHistory.objects.filter(
+                    student=student, 
+                    year=active_year.label
+                ).exists()
+                
+                if is_closed:
+                    continue  # skip closed accounts
 
-        # Calculate total paid
-        total_paid = Recipient.objects.filter(student=student, school_year=active_year).aggregate(Sum('amount'))['amount__sum'] or 0
+                # Calculate total paid
+                total_paid = Recipient.objects.filter(
+                    student=student, 
+                    school_year=active_year
+                ).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # Find the applicable fee
-        fee = SchoolFee.objects.filter(student=student, school_year=active_year).first()
-        if not fee and student.school_class:
-            fee = SchoolFee.objects.filter(school_class=student.school_class, student__isnull=True, school_year=active_year).first()
-        if not fee:
-            fee = SchoolFee.objects.filter(school_class__isnull=True, student__isnull=True, school_year=active_year).first()
+                # Find the applicable fee with fallback logic
+                fee = SchoolFee.objects.filter(
+                    student=student, 
+                    school_year=active_year
+                ).first()
+                
+                if not fee and student.school_class:
+                    fee = SchoolFee.objects.filter(
+                        school_class=student.school_class, 
+                        student__isnull=True, 
+                        school_year=active_year
+                    ).first()
+                
+                if not fee:
+                    fee = SchoolFee.objects.filter(
+                        school_class__isnull=True, 
+                        student__isnull=True, 
+                        school_year=active_year
+                    ).first()
 
-        total_fee = sum([
-            fee.school_fee or 0,
-            fee.books_fee or 0,
-            fee.trans_fee or 0,
-            fee.clothes_fee or 0,
-        ]) if fee else 0
+                # Calculate total fee with safe handling of None values
+                total_fee = 0
+                if fee:
+                    total_fee = sum([
+                        fee.school_fee or 0,
+                        fee.books_fee or 0,
+                        fee.trans_fee or 0,
+                        fee.clothes_fee or 0,
+                    ])
 
-        if total_paid < total_fee:
-            open_students.append(student)
+                # Only include students with unpaid amounts
+                if total_paid < total_fee:
+                    open_students.append(student)
+                    
+            except Exception as e:
+                # Log the error but continue processing other students
+                print(f"Error processing student {student.id}: {str(e)}")
+                continue
 
-    serializer = StudentSerializer(open_students, many=True)
-    return Response(serializer.data)
+        serializer = StudentSerializer(open_students, many=True)
+        return Response({
+            "message": f"تم العثور على {len(open_students)} طالب لديهم مستحقات غير مدفوعة",
+            "students": serializer.data,
+            "has_active_year": True,
+            "active_year": active_year.label if active_year else None
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        # Handle any unexpected errors gracefully
+        return Response({
+            "message": "حدث خطأ أثناء جلب بيانات الطلاب",
+            "students": [],
+            "has_active_year": False,
+            "error": str(e) if hasattr(request.user, 'is_superuser') and request.user.is_superuser else None
+        }, status=status.HTTP_200_OK)
+
 
 class SchoolClassListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
@@ -225,53 +284,92 @@ class StudentHistoryDetailView(generics.RetrieveAPIView):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def close_student_account(request, id):
-    student = Student.objects.get(id=id, account=request.user.account)
-    year_label = request.data.get("year")
+    """
+    Closes a student account for a specific year.
+    Improved with better error handling.
+    """
+    try:
+        student = Student.objects.get(id=id, account=request.user.account)
+        year_label = request.data.get("year")
+        
+        if not year_label:
+            return Response({
+                "error": "يجب تحديد السنة الدراسية"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Get or create the school year
-    school_year, _ = SchoolYear.objects.get_or_create(
-        label=year_label,
-        account=request.user.account,
-        defaults={'created_by': request.user}
-    )
+        # Get or create the school year
+        school_year, created = SchoolYear.objects.get_or_create(
+            label=year_label,
+            account=request.user.account,
+            defaults={'created_by': request.user}
+        )
 
-    # Update all current payments to link them with this year
-    payments_qs = Recipient.objects.filter(student=student, school_year__isnull=True)
-    payments_qs.update(school_year=school_year)
+        # Check if account is already closed
+        if StudentPaymentHistory.objects.filter(student=student, year=year_label).exists():
+            return Response({
+                "error": "حساب الطالب مغلق بالفعل لهذه السنة"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-    # Get serialized copy of payments
-    payments = list(payments_qs.values())
+        # Update all current payments to link them with this year
+        payments_qs = Recipient.objects.filter(student=student, school_year__isnull=True)
+        updated_count = payments_qs.update(school_year=school_year)
 
-    for p in payments:
-        for k, v in p.items():
-            if isinstance(v, UUID):
-                p[k] = str(v)
-            elif isinstance(v, Decimal):
-                p[k] = float(v)
+        # Get serialized copy of payments
+        payments = list(payments_qs.values())
 
-    # Get student-level school fee
-    fee = SchoolFee.objects.filter(student=student).first()
-    fee_data = None
-    if fee:
-        fee_data = {
-            "school_fee": fee.school_fee,
-            "books_fee": fee.books_fee,
-            "trans_fee": fee.trans_fee,
-            "clothes_fee": fee.clothes_fee,
-        }
-        fee.delete()
+        for p in payments:
+            for k, v in p.items():
+                if isinstance(v, UUID):
+                    p[k] = str(v)
+                elif isinstance(v, Decimal):
+                    p[k] = float(v)
 
-    total_paid = payments_qs.aggregate(Sum("amount"))["amount__sum"] or 0
+        # Get student-level school fee
+        fee = SchoolFee.objects.filter(student=student).first()
+        fee_data = None
+        if fee:
+            fee_data = {
+                "school_fee": fee.school_fee,
+                "books_fee": fee.books_fee,
+                "trans_fee": fee.trans_fee,
+                "clothes_fee": fee.clothes_fee,
+            }
+            fee.delete()
 
-    # Save to payment history
-    StudentPaymentHistory.objects.create(
-        student=student,
-        year=year_label,
-        total_paid=total_paid,
-        fees_snapshot=fee_data,
-        payments_snapshot=payments,
-        created_by=request.user
-    )
+        total_paid = payments_qs.aggregate(Sum("amount"))["amount__sum"] or 0
 
-    return Response({"message": "تم تسكير الحساب بنجاح"}, status=status.HTTP_200_OK)
+        # Save to payment history
+        StudentPaymentHistory.objects.create(
+            student=student,
+            year=year_label,
+            total_paid=total_paid,
+            fees_snapshot=fee_data,
+            payments_snapshot=payments,
+            created_by=request.user
+        )
 
+        # Log the activity
+        log_activity(
+            user=request.user,
+            account=request.user.account,
+            note=f"تم إغلاق حساب الطالب {student.first_name} {student.second_name} للسنة {year_label}",
+            related_model='Student',
+            related_id=str(student.id)
+        )
+
+        return Response({
+            "message": "تم تسكير الحساب بنجاح",
+            "total_paid": float(total_paid),
+            "payments_updated": updated_count,
+            "year": year_label
+        }, status=status.HTTP_200_OK)
+        
+    except Student.DoesNotExist:
+        return Response({
+            "error": "الطالب غير موجود"
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            "error": "حدث خطأ أثناء إغلاق الحساب",
+            "details": str(e) if hasattr(request.user, 'is_superuser') and request.user.is_superuser else None
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

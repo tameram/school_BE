@@ -37,17 +37,22 @@ class BankTransferDetailViewSet(viewsets.ModelViewSet):
     serializer_class = BankTransferDetailSerializer
 
 
-
-class NotReceivedRecipientList(ListAPIView):
-    serializer_class = RecipientSerializer
-
-    def get_queryset(self):
-        user = self.request.user
-        return Recipient.objects.filter(account=user.account, received=False)
-
 class ChequeDetailViewSet(viewsets.ModelViewSet):
     queryset = ChequeDetail.objects.all()
     serializer_class = ChequeDetailSerializer
+
+
+class NotReceivedRecipientList(ListAPIView):
+    serializer_class = RecipientSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        # Use select_related to optimize database queries for cheque details
+        return Recipient.objects.filter(
+            account=user.account, 
+            received=False
+        ).select_related('cheque', 'student', 'school_fee')
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -56,7 +61,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         account = self.request.user.account
-        queryset = Payment.objects.filter(account=account)
+        queryset = Payment.objects.filter(account=account).select_related('cheque')
 
         school_year_param = self.request.query_params.get('school_year')
         if school_year_param == 'current':
@@ -85,7 +90,10 @@ class RecipientViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         account = self.request.user.account
-        queryset = Recipient.objects.filter(account=account)
+        # Optimize queries by including related objects
+        queryset = Recipient.objects.filter(account=account).select_related(
+            'cheque', 'student', 'school_fee', 'student__school_class'
+        )
 
         # Dynamic filtering for `?school_year=current`
         school_year_param = self.request.query_params.get('school_year')
@@ -109,7 +117,21 @@ class RecipientViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def not_received(self, request):
+        """
+        Custom action to get not received recipients with cheque details
+        URL: /recipients/not_received/
+        """
         queryset = self.get_queryset().filter(received=False)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def with_cheques(self, request):
+        """
+        Custom action to get only recipients that have cheque details
+        URL: /recipients/with_cheques/
+        """
+        queryset = self.get_queryset().filter(cheque__isnull=False)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
