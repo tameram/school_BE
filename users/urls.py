@@ -1,6 +1,6 @@
 # accounts/urls.py
 from django.urls import path
-from .views import CustomLoginView, AccountUpdateView, MeView, AuthenticatedPasswordResetView
+from .views import AccountUsersListView, CustomLoginView, AccountUpdateView, MeView, AuthenticatedPasswordResetView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -9,5 +9,7 @@ urlpatterns = [
     path('account/', AccountUpdateView.as_view(), name='account_update'),  
     path('me/', MeView.as_view(), name='me'),
     path('reset-password/', AuthenticatedPasswordResetView.as_view(), name='reset-password'),
+    path('users/', AccountUsersListView.as_view(), name='account-users'),  # Add this line
+
     
 ]

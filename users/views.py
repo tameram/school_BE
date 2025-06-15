@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from django.contrib.auth import get_user_model
 from .models import Account
 from .serializers import AccountUpdateSerializer
 from logs.utils import log_activity
@@ -37,8 +38,50 @@ class CustomLoginView(TokenObtainPairView):
 class CustomTokenView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
+User = get_user_model()
+class AccountUsersListView(APIView):
+    """
+    Get all users that belong to the current user's account
+    """
+    permission_classes = [IsAuthenticated]
 
-# accounts/views.py
+    def get(self, request):
+        try:
+            # Get all users from the same account
+            users = User.objects.filter(
+                account=request.user.account,
+                is_active=True
+            ).values(
+                'id', 
+                'username', 
+                'first_name', 
+                'last_name', 
+                'email', 
+                'role'
+            )
+            
+            # Format the response for frontend consumption
+            formatted_users = []
+            for user in users:
+                display_name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip()
+                if not display_name:
+                    display_name = user['username']
+                
+                formatted_users.append({
+                    'id': str(user['id']),
+                    'username': user['username'],
+                    'display_name': display_name,
+                    'email': user['email'],
+                    'role': user['role']
+                })
+            
+            return Response(formatted_users, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {'error': 'Failed to fetch users'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class AccountUpdateView(APIView):
