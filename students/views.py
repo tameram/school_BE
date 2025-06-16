@@ -42,11 +42,17 @@ class BusListCreateView(generics.ListCreateAPIView):
 
 
 class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = BusSerializer
     lookup_field = 'id'
 
     def get_queryset(self):
         return Bus.objects.filter(account=self.request.user.account)
+
+    def get_serializer_class(self):
+        # Use BusCreateSerializer for updates (PUT/PATCH) since it includes driver field
+        if self.request.method in ['PUT', 'PATCH']:
+            return BusCreateSerializer
+        # Use BusSerializer for retrieving (GET) since it has all the computed fields
+        return BusSerializer
 
     def perform_update(self, serializer):
         bus = serializer.save(account=self.request.user.account)
