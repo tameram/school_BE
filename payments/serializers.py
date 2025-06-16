@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PaymentType, BankTransferDetail, ChequeDetail,  Payment, Recipient
+from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
 
 class PaymentTypeSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,11 +20,31 @@ class ChequeDetailSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    # For write operations (create/update) - nested cheque data
     cheque_details = ChequeDetailSerializer(required=False, write_only=True)
+    
+    # For read operations - include the actual cheque details
+    cheque = ChequeDetailSerializer(read_only=True)
+    
     target_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = Payment
         exclude = ['account', 'created_by']
+    
+    def to_representation(self, instance):
+        """
+        Override to ensure cheque details are properly serialized
+        """
+        data = super().to_representation(instance)
+        
+        # Ensure cheque is properly serialized as an object, not just UUID
+        if instance.cheque:
+            data['cheque'] = ChequeDetailSerializer(instance.cheque).data
+        else:
+            data['cheque'] = None
+            
+        return data
     
     def get_target_name(self, obj):
         if obj.payment_type == 'متفرقات':
@@ -47,15 +67,39 @@ class PaymentSerializer(serializers.ModelSerializer):
 
         if cheque_data:
             cheque = ChequeDetail.objects.create(**cheque_data)
-            payment.cheque = cheque  # ✅ assign to the actual ForeignKey field
+            payment.cheque = cheque
             payment.save()
 
         return payment
-    
+
+    def update(self, instance, validated_data):
+        cheque_data = validated_data.pop('cheque_details', None)
+        
+        # Update payment fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Handle cheque data
+        if cheque_data:
+            if instance.cheque:
+                # Update existing cheque
+                for attr, value in cheque_data.items():
+                    setattr(instance.cheque, attr, value)
+                instance.cheque.save()
+            else:
+                # Create new cheque
+                cheque = ChequeDetail.objects.create(**cheque_data)
+                instance.cheque = cheque
+        
+        instance.save()
+        return instance
+
+
 class SimplePaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = ['id', 'number', 'amount', 'date', 'reason']
+
 
 class RecipientSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
@@ -67,8 +111,21 @@ class RecipientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Recipient
-        fields = '__all__'  # Includes all model fields + custom fields below
-        # OR explicitly: ['id', 'amount', 'date', ..., 'student_name', 'student_id', 'parent_name', 'parent_phone', 'class_name', 'cheque']
+        fields = '__all__'
+
+    def to_representation(self, instance):
+        """
+        Override to ensure cheque details are properly serialized
+        """
+        data = super().to_representation(instance)
+        
+        # Ensure cheque is properly serialized as an object, not just UUID
+        if instance.cheque:
+            data['cheque'] = ChequeDetailSerializer(instance.cheque).data
+        else:
+            data['cheque'] = None
+            
+        return data
 
     def get_student_name(self, obj):
         if obj.student:
@@ -88,4 +145,3 @@ class RecipientSerializer(serializers.ModelSerializer):
         if obj.student and obj.student.school_class:
             return obj.student.school_class.name
         return None
-   
