@@ -1,7 +1,6 @@
-# payments/models.py
-
 import uuid
 from django.db import models
+from django.utils import timezone
 from students.models import Student, Bus
 from settings_data.models import SchoolFee, AuthorizedPayer, SchoolYear
 from employees.models import Employee
@@ -74,15 +73,19 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     reason = models.CharField(max_length=255, null=True, blank=True)
 
-    recipient_employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments'
-)
-    recipient_bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True,
-    related_name='payments')
+    recipient_employee = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
+    recipient_bus = models.ForeignKey(Bus, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
     recipient_authorized = models.ForeignKey(
         AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True, related_name='recipient_payments'
     )
 
-    date = models.DateField()
+    # NEW: Separate date and time fields
+    date = models.DateField(null=True, blank=True)
+    time = models.TimeField(null=True, blank=True, default=timezone.now)
+    
+    # NEW: DateTime field for easier querying (auto-populated)
+    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True, auto_now=True)
 
     def save(self, *args, **kwargs):
         if self.number is None:
@@ -95,6 +98,7 @@ class Payment(models.Model):
                 except IntegrityError:
                     # Retry with new number
                     continue
+
     def __str__(self):
         return f"Payment #{self.number} - {self.amount}"
 
@@ -119,7 +123,14 @@ class Recipient(models.Model):
     )
 
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
+    
+    # NEW: Separate date and time fields
+    date = models.DateField(null=True, blank=True)
+    time = models.TimeField(null=True, blank=True, default=timezone.now)
+    
+    # NEW: DateTime field for easier querying (auto-populated)
+    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True, auto_now=True)
 
     received = models.BooleanField(default=False)
 

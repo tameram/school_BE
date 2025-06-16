@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
 
+
 class PaymentTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentType
@@ -28,9 +29,25 @@ class PaymentSerializer(serializers.ModelSerializer):
     
     target_name = serializers.SerializerMethodField()
     
+    # NEW: Format time display
+    time_display = serializers.SerializerMethodField()
+    datetime_display = serializers.SerializerMethodField()
+    
     class Meta:
         model = Payment
         exclude = ['account', 'created_by']
+    
+    def get_time_display(self, obj):
+        """Return formatted time string"""
+        if obj.time:
+            return obj.time.strftime('%H:%M:%S')
+        return None
+    
+    def get_datetime_display(self, obj):
+        """Return formatted datetime string"""
+        if obj.date and obj.time:
+            return f"{obj.date} {obj.time.strftime('%H:%M:%S')}"
+        return None
     
     def to_representation(self, instance):
         """
@@ -96,9 +113,16 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class SimplePaymentSerializer(serializers.ModelSerializer):
+    time_display = serializers.SerializerMethodField()
+    
     class Meta:
         model = Payment
-        fields = ['id', 'number', 'amount', 'date', 'reason']
+        fields = ['id', 'number', 'amount', 'date', 'time', 'time_display', 'reason']
+    
+    def get_time_display(self, obj):
+        if obj.time:
+            return obj.time.strftime('%H:%M:%S')
+        return None
 
 
 class RecipientSerializer(serializers.ModelSerializer):
@@ -108,10 +132,26 @@ class RecipientSerializer(serializers.ModelSerializer):
     parent_phone = serializers.SerializerMethodField()
     class_name = serializers.SerializerMethodField()
     cheque = ChequeDetailSerializer(read_only=True)
+    
+    # NEW: Format time display
+    time_display = serializers.SerializerMethodField()
+    datetime_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipient
         fields = '__all__'
+    
+    def get_time_display(self, obj):
+        """Return formatted time string"""
+        if obj.time:
+            return obj.time.strftime('%H:%M:%S')
+        return None
+    
+    def get_datetime_display(self, obj):
+        """Return formatted datetime string"""
+        if obj.date and obj.time:
+            return f"{obj.date} {obj.time.strftime('%H:%M:%S')}"
+        return None
 
     def to_representation(self, instance):
         """
