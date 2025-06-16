@@ -10,7 +10,6 @@ from django.db import models
 from rest_framework.permissions import IsAuthenticated
 
 
-
 class StudentHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentHistory
@@ -133,7 +132,8 @@ class StudentBasicSerializer(serializers.ModelSerializer):
 class BusSerializer(serializers.ModelSerializer):
     student_count = serializers.SerializerMethodField()
     driver_name = serializers.SerializerMethodField()
-    students = StudentBasicSerializer(many=True, read_only=True)
+    driver_phone = serializers.SerializerMethodField()  # ✅ NEW: Add driver phone
+    students = serializers.SerializerMethodField()  # ✅ Changed to method field to filter archived
     payments = PaymentSerializer(many=True, read_only=True)
 
     class Meta:
@@ -141,7 +141,7 @@ class BusSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'bus_number', 'bus_type',
             'capacity', 'phone_number', 'manager_name',
-            'student_count', 'driver_name', 'students',
+            'student_count', 'driver_name', 'driver_phone', 'students',
             'payments'
         ]
 
@@ -153,6 +153,21 @@ class BusSerializer(serializers.ModelSerializer):
         if obj.driver:
             return f"{obj.driver.first_name} {obj.driver.last_name}".strip()
         return "غير محدد"
+
+    def get_driver_phone(self, obj):
+        """
+        Return driver phone number if bus_type is 'داخلي' and driver exists
+        """
+        if obj.bus_type == "داخلي" and obj.driver:
+            return obj.driver.phone_number or "غير محدد"
+        return None  # Don't include phone for external buses or when no driver
+
+    def get_students(self, obj):
+        """
+        Return only non-archived students
+        """
+        active_students = obj.students.filter(is_archived=False)
+        return StudentBasicSerializer(active_students, many=True).data
 
 
 class SchoolClassListSerializer(serializers.ModelSerializer):
@@ -174,7 +189,7 @@ class SchoolClassListSerializer(serializers.ModelSerializer):
 
 
 class SchoolClassDetailSerializer(serializers.ModelSerializer):
-    students = StudentSerializer(many=True, read_only=True)
+    students = serializers.SerializerMethodField()  # ✅ Changed to method field to filter archived
     teacher = serializers.SerializerMethodField()
     teacher_name = serializers.SerializerMethodField()
     active_student_count = serializers.SerializerMethodField()
@@ -183,6 +198,13 @@ class SchoolClassDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolClass
         fields = ['id', 'name', 'students', 'teacher', 'teacher_name', 'active_student_count', 'archived_student_count']
+
+    def get_students(self, obj):
+        """
+        Return only non-archived students
+        """
+        active_students = obj.students.filter(is_archived=False)
+        return StudentSerializer(active_students, many=True).data
 
     def get_teacher(self, obj):
         """Return teacher name for backward compatibility"""
