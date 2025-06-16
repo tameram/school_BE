@@ -3,7 +3,6 @@ import uuid
 from users.models import Account, CustomUser
 
 
-
 class SchoolClass(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True)
@@ -51,13 +50,16 @@ class Student(models.Model):
 
     parent_name = models.CharField(max_length=255, null=True, blank=True)
     parent_phone = models.CharField(max_length=20, null=True, blank=True)
+    parent_phone_2 = models.CharField(max_length=20, null=True, blank=True)  # New optional phone field
     parent_email = models.EmailField(null=True, blank=True)
 
     note = models.TextField(null=True, blank=True)
+    
+    # File upload field for documents/images
+    attachment = models.FileField(upload_to='student_attachments/', null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True)
-
 
     def __str__(self):
         return f"{self.first_name} {self.second_name or ''}".strip()

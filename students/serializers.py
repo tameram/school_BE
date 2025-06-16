@@ -22,6 +22,7 @@ class StudentSerializer(serializers.ModelSerializer):
     school_fees = serializers.SerializerMethodField()
     school_fees_by_year = serializers.SerializerMethodField()
     payment_summary = serializers.SerializerMethodField()
+    attachment_url = serializers.SerializerMethodField()  # For file URL
     
     class Meta:
         model = Student
@@ -39,6 +40,21 @@ class StudentSerializer(serializers.ModelSerializer):
             if Student.objects.filter(student_id=value).exclude(id=self.instance.id).exists():
                 raise serializers.ValidationError("هذا الطالب موجود بالفعل في النظام")
         return value
+
+    def validate_parent_phone_2(self, value):
+        """Validate optional second phone number"""
+        if value and not value.startswith('0') or (value and len(value) != 10):
+            raise serializers.ValidationError("رقم الهاتف الثاني يجب أن يكون 10 أرقام ويبدأ بـ 0")
+        return value
+
+    def get_attachment_url(self, obj):
+        """Return the full URL for the attachment file"""
+        if obj.attachment:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.attachment.url)
+            return obj.attachment.url
+        return None
     
     def get_school_fees_by_year(self, student):
         fees = SchoolFee.objects.filter(student=student)

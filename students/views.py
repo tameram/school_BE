@@ -1,4 +1,4 @@
-from rest_framework import generics, serializers
+from rest_framework import generics, serializers, parsers
 from rest_framework.generics import RetrieveUpdateAPIView
 from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
@@ -81,12 +81,14 @@ class StudentListCreateView(generics.ListCreateAPIView):
     filterset_fields = ['is_archived', 'account']
     ordering_fields = ['date_of_registration']
     permission_classes = [IsAuthenticated]
+    # Add support for multipart form data (file uploads)
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_queryset(self):
         return Student.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        student = serializer.save(account=self.request.user.account)
+        student = serializer.save(account=self.request.user.account, created_by=self.request.user)
         log_activity(
             user=self.request.user,
             account=self.request.user.account,
@@ -95,14 +97,28 @@ class StudentListCreateView(generics.ListCreateAPIView):
             related_id=str(student.id)
         )
 
+    def get_serializer_context(self):
+        """Add request context to serializer for file URL generation"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
 
 class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):
     serializer_class = StudentSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+    # Add support for multipart form data (file uploads)
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_queryset(self):
         return Student.objects.filter(account=self.request.user.account)
+
+    def get_serializer_context(self):
+        """Add request context to serializer for file URL generation"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def perform_update(self, serializer):
         student = self.get_object()
@@ -232,7 +248,7 @@ def students_with_open_accounts(request):
                 print(f"Error processing student {student.id}: {str(e)}")
                 continue
 
-        serializer = StudentSerializer(open_students, many=True)
+        serializer = StudentSerializer(open_students, many=True, context={'request': request})
         return Response({
             "message": f"تم العثور على {len(open_students)} طالب لديهم مستحقات غير مدفوعة",
             "students": serializer.data,
