@@ -9,6 +9,16 @@ from django.db import IntegrityError, transaction
 from users.models import Account, CustomUser
 
 
+def get_current_time():
+    """Helper function to get current time only (without date)"""
+    return timezone.now().time()
+
+
+def get_current_date():
+    """Helper function to get current date only"""
+    return timezone.now().date()
+
+
 class PaymentType(models.Model):
     PAYMENT_TYPE_CHOICES = [
         ('cash', 'Cash'),
@@ -79,15 +89,21 @@ class Payment(models.Model):
         AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True, related_name='recipient_payments'
     )
 
-    # NEW: Separate date and time fields
-    date = models.DateField(null=True, blank=True)
-    time = models.TimeField(null=True, blank=True, default=timezone.now)
+    # Separate date and time fields with proper defaults
+    date = models.DateField(default=get_current_date)
+    time = models.TimeField(default=get_current_time)
     
-    # NEW: DateTime field for easier querying (auto-populated)
-    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
-    updated_at = models.DateTimeField(null=True, blank=True, auto_now=True)
+    # DateTime field for easier querying (auto-populated)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
+        # Auto-populate date and time if not provided
+        if not self.date:
+            self.date = get_current_date()
+        if not self.time:
+            self.time = get_current_time()
+            
         if self.number is None:
             for attempt in range(5):  # retry up to 5 times
                 try:
@@ -124,17 +140,23 @@ class Recipient(models.Model):
 
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     
-    # NEW: Separate date and time fields
-    date = models.DateField(null=True, blank=True)
-    time = models.TimeField(null=True, blank=True, default=timezone.now)
+    # Separate date and time fields with proper defaults
+    date = models.DateField(default=get_current_date)
+    time = models.TimeField(default=get_current_time)
     
-    # NEW: DateTime field for easier querying (auto-populated)
-    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
-    updated_at = models.DateTimeField(null=True, blank=True, auto_now=True)
+    # DateTime field for easier querying (auto-populated)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     received = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
+        # Auto-populate date and time if not provided
+        if not self.date:
+            self.date = get_current_date()
+        if not self.time:
+            self.time = get_current_time()
+            
         if self.number is None:
             self.number = get_next_number('recipient', start=20000000)
         super().save(*args, **kwargs)

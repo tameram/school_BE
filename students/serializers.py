@@ -186,7 +186,45 @@ class BusSerializer(serializers.ModelSerializer):
         return StudentBasicSerializer(active_students, many=True).data
 
 
+class SchoolClassCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating and updating school classes"""
+    
+    class Meta:
+        model = SchoolClass
+        fields = ['id', 'name', 'teacher']
+        read_only_fields = ['id']
+
+    def to_internal_value(self, data):
+        """Debug what data is being received"""
+        print(f"Received data in serializer: {data}")
+        result = super().to_internal_value(data)
+        print(f"After validation: {result}")
+        return result
+
+    def update(self, instance, validated_data):
+        """Custom update method to ensure teacher is properly saved"""
+        print(f"Updating class {instance.name} with validated data: {validated_data}")
+        
+        # Explicitly handle teacher field
+        if 'teacher' in validated_data:
+            teacher = validated_data['teacher']
+            print(f"Setting teacher to: {teacher}")
+            instance.teacher = teacher
+        
+        if 'name' in validated_data:
+            instance.name = validated_data['name']
+        
+        instance.save()
+        
+        # Refresh from database to verify
+        instance.refresh_from_db()
+        print(f"After save and refresh - Class: {instance.name}, Teacher: {instance.teacher}")
+        
+        return instance
+
+
 class SchoolClassListSerializer(serializers.ModelSerializer):
+    """Serializer for listing school classes"""
     student_count = serializers.SerializerMethodField()
     teacher = serializers.SerializerMethodField()
 

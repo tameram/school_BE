@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Recipient
 
 
@@ -29,7 +30,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     
     target_name = serializers.SerializerMethodField()
     
-    # NEW: Format time display
+    # Format time display
     time_display = serializers.SerializerMethodField()
     datetime_display = serializers.SerializerMethodField()
     
@@ -80,6 +81,14 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         cheque_data = validated_data.pop('cheque_details', None)
+        
+        # Auto-populate date and time if not provided
+        if 'date' not in validated_data or not validated_data['date']:
+            validated_data['date'] = timezone.now().date()
+        
+        if 'time' not in validated_data or not validated_data['time']:
+            validated_data['time'] = timezone.now().time()
+        
         payment = Payment.objects.create(**validated_data)
 
         if cheque_data:
@@ -133,7 +142,7 @@ class RecipientSerializer(serializers.ModelSerializer):
     class_name = serializers.SerializerMethodField()
     cheque = ChequeDetailSerializer(read_only=True)
     
-    # NEW: Format time display
+    # Format time display
     time_display = serializers.SerializerMethodField()
     datetime_display = serializers.SerializerMethodField()
 
@@ -166,6 +175,16 @@ class RecipientSerializer(serializers.ModelSerializer):
             data['cheque'] = None
             
         return data
+
+    def create(self, validated_data):
+        # Auto-populate date and time if not provided
+        if 'date' not in validated_data or not validated_data['date']:
+            validated_data['date'] = timezone.now().date()
+        
+        if 'time' not in validated_data or not validated_data['time']:
+            validated_data['time'] = timezone.now().time()
+        
+        return super().create(validated_data)
 
     def get_student_name(self, obj):
         if obj.student:

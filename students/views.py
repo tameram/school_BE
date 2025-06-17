@@ -8,7 +8,8 @@ from datetime import date
 from .models import Student, SchoolClass, StudentHistory, Bus, StudentPaymentHistory
 from .serializers import (
     StudentSerializer, SchoolClassListSerializer, SchoolClassDetailSerializer,
-    StudentHistorySerializer, BusSerializer, BusCreateSerializer
+    StudentHistorySerializer, BusSerializer, BusCreateSerializer,
+    SchoolClassCreateUpdateSerializer  # Import the new serializer
 )
 from logs.utils import log_activity
 
@@ -267,8 +268,16 @@ def students_with_open_accounts(request):
 
 
 class SchoolClassListCreateView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
+    
     def get_queryset(self):
         return SchoolClass.objects.filter(account=self.request.user.account)
+
+    def get_serializer_class(self):
+        """Use different serializers for different operations"""
+        if self.request.method == 'POST':
+            return SchoolClassCreateUpdateSerializer  # For creating
+        return SchoolClassListSerializer  # For listing
 
     def perform_create(self, serializer):
         class_obj = serializer.save(account=self.request.user.account, created_by=self.request.user)
@@ -280,14 +289,46 @@ class SchoolClassListCreateView(generics.ListCreateAPIView):
             related_id=str(class_obj.id)
         )
 
-    def get_serializer_class(self):
-        return SchoolClassListSerializer if self.request.method == 'POST' else SchoolClassListSerializer
 
-
-class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateAPIView):
-    queryset = SchoolClass.objects.all()
-    serializer_class = SchoolClassDetailSerializer
+class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+    
+    def get_queryset(self):
+        return SchoolClass.objects.filter(account=self.request.user.account)
+
+    def get_serializer_class(self):
+        """Use different serializers for different operations"""
+        if self.request.method in ['PUT', 'PATCH']:
+            return SchoolClassCreateUpdateSerializer  # For updating
+        return SchoolClassDetailSerializer  # For retrieving
+
+    def perform_update(self, serializer):
+        # Debug: Print the validated data to see what's being processed
+        print(f"Update data: {serializer.validated_data}")
+        
+        class_obj = serializer.save()
+        
+        # Debug: Print the saved object
+        print(f"Saved class: {class_obj.name}, Teacher: {class_obj.teacher}")
+        
+        log_activity(
+            user=self.request.user,
+            account=self.request.user.account,
+            note=f"تم تعديل الصف {class_obj.name}",
+            related_model='SchoolClass',
+            related_id=str(class_obj.id)
+        )
+
+    def perform_destroy(self, instance):
+        log_activity(
+            user=self.request.user,
+            account=self.request.user.account,
+            note=f"تم حذف الصف {instance.name}",
+            related_model='SchoolClass',
+            related_id=str(instance.id)
+        )
+        instance.delete()
 
 
 class StudentHistoryListCreateView(generics.ListCreateAPIView):
