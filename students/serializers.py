@@ -186,42 +186,98 @@ class BusSerializer(serializers.ModelSerializer):
         return StudentBasicSerializer(active_students, many=True).data
 
 
+
 class SchoolClassCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating and updating school classes"""
+    """Serializer for creating and updating school classes - Simplified Version"""
     
     class Meta:
         model = SchoolClass
         fields = ['id', 'name', 'teacher']
         read_only_fields = ['id']
 
+    def validate_name(self, value):
+        """Validate that class name is unique within the account"""
+        if not value:
+            raise serializers.ValidationError("اسم الصف مطلوب")
+        
+        # Clean the value
+        cleaned_value = value.strip()
+        if not cleaned_value:
+            raise serializers.ValidationError("اسم الصف لا يمكن أن يكون فارغاً")
+        
+        # Get the account from the request context
+        request = self.context.get('request')
+        if not request or not hasattr(request.user, 'account'):
+            raise serializers.ValidationError("لا يمكن التحقق من صحة البيانات")
+        
+        account = request.user.account
+        
+        # Check for existing class with same name in the same account (case-insensitive)
+        existing_class = SchoolClass.objects.filter(
+            name__iexact=cleaned_value, 
+            account=account
+        )
+        
+        # If updating, exclude the current instance
+        if self.instance:
+            existing_class = existing_class.exclude(id=self.instance.id)
+        
+        if existing_class.exists():
+            raise serializers.ValidationError("يوجد صف بنفس الاسم ")
+        
+        return cleaned_value
+
+    def validate_teacher(self, value):
+        """Validate that teacher exists and is active - Simplified"""
+        if not value:
+            raise serializers.ValidationError("المعلم المسؤول مطلوب")
+        
+        # Get the account from the request context
+        request = self.context.get('request')
+        if not request or not hasattr(request.user, 'account'):
+            raise serializers.ValidationError("لا يمكن التحقق من صحة البيانات")
+        
+        account = request.user.account
+        
+        # Import here to avoid circular imports
+        from employees.models import Employee
+        
+        # Check if employee exists, is active, and belongs to the same account
+        try:
+            teacher = Employee.objects.get(
+                id=value.id if hasattr(value, 'id') else value,
+                account=account,
+                is_archived=False
+            )
+            return teacher
+            
+        except Employee.DoesNotExist:
+            raise serializers.ValidationError("الموظف المحدد غير موجود أو غير مفعل")
+
     def to_internal_value(self, data):
         """Debug what data is being received"""
-        print(f"Received data in serializer: {data}")
+        print(f"📥 Received data in serializer: {data}")
         result = super().to_internal_value(data)
-        print(f"After validation: {result}")
+        print(f"✅ After validation: {result}")
         return result
 
     def update(self, instance, validated_data):
-        """Custom update method to ensure teacher is properly saved"""
-        print(f"Updating class {instance.name} with validated data: {validated_data}")
+        """Custom update method with proper logging"""
+        print(f"🔄 Updating class {instance.name} with validated data: {validated_data}")
         
-        # Explicitly handle teacher field
-        if 'teacher' in validated_data:
-            teacher = validated_data['teacher']
-            print(f"Setting teacher to: {teacher}")
-            instance.teacher = teacher
-        
-        if 'name' in validated_data:
-            instance.name = validated_data['name']
+        # Update all fields from validated_data
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+            print(f"Set {field} = {value}")
         
         instance.save()
         
         # Refresh from database to verify
         instance.refresh_from_db()
-        print(f"After save and refresh - Class: {instance.name}, Teacher: {instance.teacher}")
+        print(f"✅ After save and refresh - Class: {instance.name}, Teacher: {instance.teacher}")
         
         return instance
-
+    
 
 class SchoolClassListSerializer(serializers.ModelSerializer):
     """Serializer for listing school classes"""
@@ -290,6 +346,202 @@ class BusCreateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
+    def validate_name(self, value):
+        """Validate that bus name is unique within the account"""
+        if not value:
+            raise serializers.ValidationError("اسم الحافلة مطلوب")
+        
+        # Clean the value
+        cleaned_value = value.strip()
+        if not cleaned_value:
+            raise serializers.ValidationError("اسم الحافلة لا يمكن أن يكون فارغاً")
+        
+        # Get the account from the request context
+        request = self.context.get('request')
+        if not request or not hasattr(request.user, 'account'):
+            raise serializers.ValidationError("لا يمكن التحقق من صحة البيانات")
+        
+        account = request.user.account
+        
+        # Check for existing bus with same name in the same account (case-insensitive)
+        existing_bus = Bus.objects.filter(
+            name__iexact=cleaned_value, 
+            account=account
+        )
+        
+        # If updating, exclude the current instance
+        if self.instance:
+            existing_bus = existing_bus.exclude(id=self.instance.id)
+        
+        if existing_bus.exists():
+            raise serializers.ValidationError("يوجد حافلة بنفس الاسم ")
+        
+        return cleaned_value
+
+    def validate_bus_number(self, value):
+        """Validate that bus number is unique within the account"""
+        if not value:
+            raise serializers.ValidationError("رقم اللوحة مطلوب")
+        
+        # Clean the value
+        cleaned_value = value.strip()
+        if not cleaned_value:
+            raise serializers.ValidationError("رقم اللوحة لا يمكن أن يكون فارغاً")
+        
+        # Get the account from the request context
+        request = self.context.get('request')
+        if not request or not hasattr(request.user, 'account'):
+            raise serializers.ValidationError("لا يمكن التحقق من صحة البيانات")
+        
+        account = request.user.account
+        
+        # Check for existing bus with same number in the same account (case-insensitive)
+        existing_bus = Bus.objects.filter(
+            bus_number__iexact=cleaned_value, 
+            account=account
+        )
+        
+        # If updating, exclude the current instance
+        if self.instance:
+            existing_bus = existing_bus.exclude(id=self.instance.id)
+        
+        if existing_bus.exists():
+            raise serializers.ValidationError("يوجد حافلة بنفس رقم اللوحة ")
+        
+        return cleaned_value
+
+    def validate_bus_type(self, value):
+        """Validate bus type"""
+        if not value:
+            raise serializers.ValidationError("نوع الحافلة مطلوب")
+        
+        allowed_types = ['داخلي', 'خارجي']
+        if value not in allowed_types:
+            raise serializers.ValidationError(f"نوع الحافلة يجب أن يكون أحد القيم التالية: {', '.join(allowed_types)}")
+        
+        return value
+
+    def validate_capacity(self, value):
+        """Validate bus capacity"""
+        if not value:
+            raise serializers.ValidationError("سعة الحافلة مطلوبة")
+        
+        if value < 1:
+            raise serializers.ValidationError("سعة الحافلة يجب أن تكون أكبر من صفر")
+        
+        if value > 100:  # Reasonable upper limit
+            raise serializers.ValidationError("سعة الحافلة كبيرة جداً")
+        
+        return value
+
+    def validate_driver(self, value):
+        """Validate driver for internal buses"""
+        # This validation will be called if driver field is provided
+        if value:
+            # Get the account from the request context
+            request = self.context.get('request')
+            if not request or not hasattr(request.user, 'account'):
+                raise serializers.ValidationError("لا يمكن التحقق من صحة البيانات")
+            
+            account = request.user.account
+            
+            # Import here to avoid circular imports
+            from employees.models import Employee
+            
+            # Check if driver exists, is active, and belongs to the same account
+            try:
+                driver = Employee.objects.get(
+                    id=value.id if hasattr(value, 'id') else value,
+                    account=account,
+                    is_archived=False
+                )
+                return driver
+                
+            except Employee.DoesNotExist:
+                raise serializers.ValidationError("السائق المحدد غير موجود أو غير مفعل")
+        
+        return value
+
+    def validate_phone_number(self, value):
+        """Validate phone number for external buses"""
+        if value:
+            cleaned_value = value.strip()
+            if len(cleaned_value) < 10:
+                raise serializers.ValidationError("رقم الهاتف قصير جداً")
+            if len(cleaned_value) > 15:
+                raise serializers.ValidationError("رقم الهاتف طويل جداً")
+            return cleaned_value
+        return value
+
+    def validate_manager_name(self, value):
+        """Validate manager name for external buses"""
+        if value:
+            cleaned_value = value.strip()
+            if not cleaned_value:
+                raise serializers.ValidationError("اسم المسؤول لا يمكن أن يكون فارغاً")
+            return cleaned_value
+        return value
+
+    def validate(self, data):
+        """Cross-field validation"""
+        bus_type = data.get('bus_type')
+        driver = data.get('driver')
+        manager_name = data.get('manager_name')
+        phone_number = data.get('phone_number')
+        
+        if bus_type == 'داخلي':
+            if not driver:
+                raise serializers.ValidationError({
+                    'driver': 'السائق مطلوب للحافلات الداخلية'
+                })
+            # Clear external bus fields for internal buses
+            data['manager_name'] = None
+            data['phone_number'] = None
+            
+        elif bus_type == 'خارجي':
+            if not manager_name:
+                raise serializers.ValidationError({
+                    'manager_name': 'اسم المسؤول مطلوب للحافلات الخارجية'
+                })
+            if not phone_number:
+                raise serializers.ValidationError({
+                    'phone_number': 'رقم الهاتف مطلوب للحافلات الخارجية'
+                })
+            # Clear driver field for external buses
+            data['driver'] = None
+        
+        return data
+
+    def to_internal_value(self, data):
+        """Debug what data is being received"""
+        print(f"📥 Received bus data in serializer: {data}")
+        result = super().to_internal_value(data)
+        print(f"✅ After bus validation: {result}")
+        return result
+
+    def create(self, validated_data):
+        """Custom create method with logging"""
+        print(f"🔨 Creating bus with validated data: {validated_data}")
+        instance = super().create(validated_data)
+        print(f"✅ Created bus: {instance.name} ({instance.bus_number})")
+        return instance
+
+    def update(self, instance, validated_data):
+        """Custom update method with logging"""
+        print(f"🔄 Updating bus {instance.name} with validated data: {validated_data}")
+        
+        # Update all fields from validated_data
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+            print(f"Set {field} = {value}")
+        
+        instance.save()
+        
+        # Refresh from database to verify
+        instance.refresh_from_db()
+        print(f"✅ After save and refresh - Bus: {instance.name} ({instance.bus_number})")
+        
+        return instance
 
 class SchoolClassRetrieveUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = SchoolClassDetailSerializer

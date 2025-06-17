@@ -14,6 +14,9 @@ class SchoolClass(models.Model):
     def __str__(self):
         return self.name
 
+    class Meta:
+        unique_together = ['name', 'account']
+
 
 class Bus(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -30,6 +33,12 @@ class Bus(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.bus_number})"
+    
+    class Meta:
+        unique_together = [
+            ['name', 'account'],
+            ['bus_number', 'account']
+        ]
 
 
 class Student(models.Model):

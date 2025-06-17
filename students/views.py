@@ -41,7 +41,63 @@ class BusListCreateView(generics.ListCreateAPIView):
     def get_serializer_class(self):
         return BusCreateSerializer if self.request.method == 'POST' else BusSerializer
 
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
+
+class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return Bus.objects.filter(account=self.request.user.account)
+
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return BusCreateSerializer
+        return BusSerializer
+
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def perform_update(self, serializer):
+        bus = serializer.save()
+        log_activity(
+            user=self.request.user,
+            account=self.request.user.account,
+            note=f"تم تعديل بيانات الباص {bus.bus_number}",
+            related_model='Bus',
+            related_id=str(bus.id)
+        )
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import ValidationError
+        
+        # Check if bus has any active students
+        active_students = instance.students.filter(is_archived=False).count()
+        
+        if active_students > 0:
+            error_message = f"لا يمكن حذف الباص '{instance.name}' لأنه يحتوي على {active_students} طالب نشط. يجب نقل الطلاب إلى باص آخر أو أرشفتهم أولاً"
+            
+            raise ValidationError({
+                'detail': error_message
+            })
+        
+        log_activity(
+            user=self.request.user,
+            account=self.request.user.account,
+            note=f"تم حذف الباص {instance.bus_number}",
+            related_model='Bus',
+            related_id=str(instance.id)
+        )
+        
+        instance.delete()
+        
 class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'id'
 
@@ -313,20 +369,20 @@ class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
         return SchoolClass.objects.filter(account=self.request.user.account)
 
     def get_serializer_class(self):
-        """Use different serializers for different operations"""
         if self.request.method in ['PUT', 'PATCH']:
-            return SchoolClassCreateUpdateSerializer  # For updating
-        return SchoolClassDetailSerializer  # For retrieving
+            return SchoolClassCreateUpdateSerializer
+        return SchoolClassDetailSerializer
+
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def perform_update(self, serializer):
-        # Debug: Print the validated data to see what's being processed
-        print(f"Update data: {serializer.validated_data}")
-        
         class_obj = serializer.save()
         
-        # Debug: Print the saved object
-        print(f"Saved class: {class_obj.name}, Teacher: {class_obj.teacher}")
-        
+        # Log activity after successful save
         log_activity(
             user=self.request.user,
             account=self.request.user.account,
@@ -338,7 +394,7 @@ class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
     def perform_destroy(self, instance):
         from rest_framework.exceptions import ValidationError
         
-        # Check if class has any active students (ignore archived students as they are considered "deleted")
+        # Check if class has any active students
         active_students = instance.students.filter(is_archived=False).count()
         
         if active_students > 0:
@@ -348,7 +404,6 @@ class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
                 'detail': error_message
             })
         
-        # Log the deletion before actually deleting
         log_activity(
             user=self.request.user,
             account=self.request.user.account,
@@ -357,7 +412,6 @@ class SchoolClassRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
             related_id=str(instance.id)
         )
         
-        # Proceed with deletion
         instance.delete()
 
 
