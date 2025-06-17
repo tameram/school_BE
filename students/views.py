@@ -66,6 +66,19 @@ class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
         )
 
     def perform_destroy(self, instance):
+        from rest_framework.exceptions import ValidationError
+        
+        # Check if bus has any active students (ignore archived students as they are considered "deleted")
+        active_students = instance.students.filter(is_archived=False).count()
+        
+        if active_students > 0:
+            error_message = f"لا يمكن حذف الباص '{instance.name}' لأنه يحتوي على {active_students} طالب نشط. يجب نقل الطلاب إلى باص آخر أو أرشفتهم أولاً"
+            
+            raise ValidationError({
+                'detail': error_message
+            })
+        
+        # Log the deletion before actually deleting
         log_activity(
             user=self.request.user,
             account=self.request.user.account,
@@ -73,6 +86,8 @@ class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
             related_model='Bus',
             related_id=str(instance.id)
         )
+        
+        # Proceed with deletion
         instance.delete()
 
 
