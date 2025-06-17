@@ -2,6 +2,8 @@ from django.db import models
 from settings_data.models import EmployeeType
 from users.models import Account, CustomUser
 import uuid
+from django.core.exceptions import ValidationError
+
 
 class Employee(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -28,6 +30,45 @@ class Employee(models.Model):
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='employees', null=True, blank=True)
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
 
+    class Meta:
+        # Add unique constraint for employee_id within the same account
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee_id', 'account'],
+                condition=models.Q(employee_id__isnull=False) & ~models.Q(employee_id=''),
+                name='unique_employee_id_per_account'
+            )
+        ]
+
+    def clean(self):
+        """
+        Custom validation to ensure employee_id is unique within account
+        """
+        super().clean()
+        
+        if self.employee_id and self.account:
+            # Check for duplicates
+            existing = Employee.objects.filter(
+                employee_id=self.employee_id,
+                account=self.account
+            )
+            
+            # Exclude current instance if updating
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            
+            if existing.exists():
+                existing_employee = existing.first()
+                raise ValidationError({
+                    'employee_id': f'معرف الموظف "{self.employee_id}" موجود بالفعل للموظف {existing_employee.first_name} {existing_employee.last_name}'
+                })
+
+    def save(self, *args, **kwargs):
+        """
+        Override save to run validation
+        """
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"

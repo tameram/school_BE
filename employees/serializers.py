@@ -35,6 +35,39 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         exclude = ['account', 'created_by']
 
+    def validate_employee_id(self, value):
+        """
+        Validate that employee_id is unique within the account.
+        Allow empty/null values but prevent duplicates of actual IDs.
+        """
+        if not value:  # Allow empty employee_id
+            return value
+
+        # Get the current user's account from the serializer context
+        request = self.context.get('request')
+        if not request:
+            raise serializers.ValidationError("لا يمكن التحقق من معرف الموظف")
+
+        account = request.user.account
+
+        # Check for duplicates within the same account
+        existing_query = Employee.objects.filter(
+            employee_id=value,
+            account=account
+        )
+
+        # If this is an update (instance exists), exclude the current instance
+        if self.instance:
+            existing_query = existing_query.exclude(id=self.instance.id)
+
+        if existing_query.exists():
+            existing_employee = existing_query.first()
+            raise serializers.ValidationError(
+                f"معرف الموظف '{value}' موجود بالفعل للموظف {existing_employee.first_name} {existing_employee.last_name}"
+            )
+
+        return value
+
     def get_is_teacher(self, obj):
         return obj.employee_type.is_teacher if obj.employee_type else False
 
