@@ -21,7 +21,10 @@ class PaymentTypeViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentTypeSerializer
 
     def get_queryset(self):
-        return PaymentType.objects.filter(account=self.request.user.account)
+        # ✅ Add select_related for created_by to optimize queries
+        return PaymentType.objects.filter(
+            account=self.request.user.account
+        ).select_related('created_by')
 
     def perform_create(self, serializer):
         instance = serializer.save(account=self.request.user.account, created_by=self.request.user)
@@ -48,10 +51,17 @@ class NotReceivedRecipientList(ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        # ✅ Add select_related for created_by and school_year
         return Recipient.objects.filter(
             account=user.account, 
             received=False
-        ).select_related('cheque', 'student', 'school_fee')
+        ).select_related(
+            'cheque', 
+            'student', 
+            'school_fee',
+            'created_by',  # ✅ NEW
+            'school_year'  # ✅ NEW
+        )
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -60,14 +70,15 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         account = self.request.user.account
-        # ✅ CRITICAL: Include cheque in select_related for proper serialization
+        # ✅ CRITICAL: Include cheque, created_by, and school_year in select_related
         queryset = Payment.objects.filter(account=account).select_related(
             'cheque',  # This is essential for proper cheque serialization
             'recipient_employee', 
             'recipient_bus', 
             'recipient_authorized',
             'authorized_payer',
-            'school_year'
+            'school_year',  # ✅ NEW
+            'created_by'    # ✅ NEW
         )
 
         school_year_param = self.request.query_params.get('school_year')
@@ -133,12 +144,14 @@ class RecipientViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         account = self.request.user.account
-        # ✅ CRITICAL FIX: Add proper select_related and prefetch_related for cheque data
+        # ✅ CRITICAL FIX: Add proper select_related including created_by and school_year
         queryset = Recipient.objects.filter(account=account).select_related(
             'cheque',  # ✅ This ensures cheque data is loaded
             'student', 
             'school_fee', 
-            'student__school_class'
+            'student__school_class',
+            'created_by',   # ✅ NEW
+            'school_year'   # ✅ NEW
         ).prefetch_related(
             'student__school_class'  # ✅ Additional optimization
         )
@@ -153,21 +166,25 @@ class RecipientViewSet(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         """
-        ✅ CRITICAL FIX: Override retrieve to ensure cheque data is properly loaded
+        ✅ CRITICAL FIX: Override retrieve to ensure all related data is properly loaded
         """
         instance = self.get_object()
         
-        # ✅ Force reload the instance with proper relations
+        # ✅ Force reload the instance with proper relations including new fields
         instance = Recipient.objects.select_related(
             'cheque',
             'student',
             'school_fee',
-            'student__school_class'
+            'student__school_class',
+            'created_by',   # ✅ NEW
+            'school_year'   # ✅ NEW
         ).get(pk=instance.pk)
         
         # ✅ Debug logging
         print(f"🔍 Retrieved recipient {instance.id}")
         print(f"🔍 Payment type: {instance.payment_type}")
+        print(f"🔍 Created by: {instance.created_by}")
+        print(f"🔍 School year: {instance.school_year}")
         print(f"🔍 Cheque object: {instance.cheque}")
         if instance.cheque:
             print(f"🔍 Cheque details: {instance.cheque.__dict__}")
@@ -279,4 +296,3 @@ class RecipientViewSet(viewsets.ModelViewSet):
         )
         print("✅ Updated recipient:", updated_instance.id, "with cheque:", updated_instance.cheque)
         log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {updated_instance.amount}", 'Recipient', str(updated_instance.id))
- 

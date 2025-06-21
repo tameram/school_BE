@@ -4,9 +4,16 @@ from .models import PaymentType, BankTransferDetail, ChequeDetail, Payment, Reci
 
 
 class PaymentTypeSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+    
     class Meta:
         model = PaymentType
-        fields = ['id', 'name', 'display_name', 'type']
+        fields = ['id', 'name', 'display_name', 'type', 'created_by', 'created_by_name']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name or ''} {obj.created_by.last_name or ''}".strip()
+        return None
 
 
 class BankTransferDetailSerializer(serializers.ModelSerializer):
@@ -34,9 +41,25 @@ class PaymentSerializer(serializers.ModelSerializer):
     time_display = serializers.SerializerMethodField()
     datetime_display = serializers.SerializerMethodField()
     
+    # ✅ NEW: Add created_by and school_year details
+    created_by_name = serializers.SerializerMethodField()
+    school_year_label = serializers.SerializerMethodField()
+    
     class Meta:
         model = Payment
-        exclude = ['account', 'created_by']
+        exclude = ['account']
+    
+    def get_created_by_name(self, obj):
+        """Return created_by first_name + last_name"""
+        if obj.created_by:
+            return f"{obj.created_by.first_name or ''} {obj.created_by.last_name or ''}".strip()
+        return None
+    
+    def get_school_year_label(self, obj):
+        """Return school_year label"""
+        if obj.school_year:
+            return obj.school_year.label
+        return None
     
     def get_time_display(self, obj):
         """Return formatted time string"""
@@ -123,10 +146,23 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 class SimplePaymentSerializer(serializers.ModelSerializer):
     time_display = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    school_year_label = serializers.SerializerMethodField()
     
     class Meta:
         model = Payment
-        fields = ['id', 'number', 'amount', 'date', 'time', 'time_display', 'reason']
+        fields = ['id', 'number', 'amount', 'date', 'time', 'time_display', 'reason', 
+                 'created_by', 'created_by_name', 'school_year', 'school_year_label']
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name or ''} {obj.created_by.last_name or ''}".strip()
+        return None
+    
+    def get_school_year_label(self, obj):
+        if obj.school_year:
+            return obj.school_year.label
+        return None
     
     def get_time_display(self, obj):
         if obj.time:
@@ -150,10 +186,26 @@ class RecipientSerializer(serializers.ModelSerializer):
     # Format time display
     time_display = serializers.SerializerMethodField()
     datetime_display = serializers.SerializerMethodField()
+    
+    # ✅ NEW: Add created_by and school_year details
+    created_by_name = serializers.SerializerMethodField()
+    school_year_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Recipient
         fields = '__all__'
+    
+    def get_created_by_name(self, obj):
+        """Return created_by first_name + last_name"""
+        if obj.created_by:
+            return f"{obj.created_by.first_name or ''} {obj.created_by.last_name or ''}".strip()
+        return None
+    
+    def get_school_year_label(self, obj):
+        """Return school_year label"""
+        if obj.school_year:
+            return obj.school_year.label
+        return None
     
     def get_time_display(self, obj):
         """Return formatted time string"""
@@ -257,4 +309,3 @@ class RecipientSerializer(serializers.ModelSerializer):
         if obj.student and obj.student.school_class:
             return obj.student.school_class.name
         return None
-
