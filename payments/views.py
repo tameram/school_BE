@@ -129,12 +129,18 @@ class RecipientViewSet(viewsets.ModelViewSet):
     serializer_class = RecipientSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['student', 'school_fee', 'payment_type']
-    parser_classes = (MultiPartParser, FormParser)  # Add this line
+    parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
         account = self.request.user.account
+        # ✅ CRITICAL FIX: Add proper select_related and prefetch_related for cheque data
         queryset = Recipient.objects.filter(account=account).select_related(
-            'cheque', 'student', 'school_fee', 'student__school_class'
+            'cheque',  # ✅ This ensures cheque data is loaded
+            'student', 
+            'school_fee', 
+            'student__school_class'
+        ).prefetch_related(
+            'student__school_class'  # ✅ Additional optimization
         )
 
         school_year_param = self.request.query_params.get('school_year')
@@ -145,9 +151,33 @@ class RecipientViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    def retrieve(self, request, *args, **kwargs):
+        """
+        ✅ CRITICAL FIX: Override retrieve to ensure cheque data is properly loaded
+        """
+        instance = self.get_object()
+        
+        # ✅ Force reload the instance with proper relations
+        instance = Recipient.objects.select_related(
+            'cheque',
+            'student',
+            'school_fee',
+            'student__school_class'
+        ).get(pk=instance.pk)
+        
+        # ✅ Debug logging
+        print(f"🔍 Retrieved recipient {instance.id}")
+        print(f"🔍 Payment type: {instance.payment_type}")
+        print(f"🔍 Cheque object: {instance.cheque}")
+        if instance.cheque:
+            print(f"🔍 Cheque details: {instance.cheque.__dict__}")
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     def handle_cheque_data(self, request):
         """Handle cheque data from multipart form data - FIXED VERSION"""
-        print("🔍 Debug: Incoming request data:", dict(request.data))  # Debug line
+        print("🔍 Debug: Incoming request data:", dict(request.data))
         
         # ✅ FIX: Handle both nested and flat field formats
         cheque_data = {}
@@ -159,7 +189,7 @@ class RecipientViewSet(viewsets.ModelViewSet):
             'account_number': request.data.get('cheque_details.account_number'),
             'cheque_date': request.data.get('cheque_details.cheque_date'),
             'cheque_number': request.data.get('cheque_details.cheque_number'),
-            'description': request.data.get('cheque_details.description')  # ✅ Added this
+            'description': request.data.get('cheque_details.description')
         }
         
         # Try flat format as fallback (direct field names)
@@ -169,7 +199,7 @@ class RecipientViewSet(viewsets.ModelViewSet):
             'account_number': request.data.get('accountNumber'), 
             'cheque_date': request.data.get('chequeDueDate'),
             'cheque_number': request.data.get('chequeNumber'),
-            'description': request.data.get('description') or request.data.get('note')  # ✅ Added this
+            'description': request.data.get('description') or request.data.get('note')
         }
         
         # Use nested if available, otherwise fall back to flat
@@ -179,7 +209,7 @@ class RecipientViewSet(viewsets.ModelViewSet):
             elif flat_fields[field]:
                 cheque_data[field] = flat_fields[field]
         
-        print("🔍 Debug: Processed cheque data:", cheque_data)  # Debug line
+        print("🔍 Debug: Processed cheque data:", cheque_data)
         
         # Only create cheque if at least one field has data
         if any(value for value in cheque_data.values() if value):
@@ -192,10 +222,10 @@ class RecipientViewSet(viewsets.ModelViewSet):
                 cheque.cheque_image = image_file
                 cheque.save()
                 
-            print("✅ Created cheque:", cheque.id, "with data:", cheque_data)  # Debug line
+            print("✅ Created cheque:", cheque.id, "with data:", cheque_data)
             return cheque
             
-        print("❌ No cheque data found")  # Debug line
+        print("❌ No cheque data found")
         return None
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -213,18 +243,18 @@ class RecipientViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
-        print("🔍 Creating recipient with data:", dict(self.request.data))  # Debug line
+        print("🔍 Creating recipient with data:", dict(self.request.data))
         cheque = self.handle_cheque_data(self.request)
         instance = serializer.save(
             account=self.request.user.account, 
             created_by=self.request.user, 
             cheque=cheque
         )
-        print("✅ Created recipient:", instance.id, "with cheque:", instance.cheque)  # Debug line
+        print("✅ Created recipient:", instance.id, "with cheque:", instance.cheque)
         log_activity(self.request.user, self.request.user.account, f"تم إنشاء سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
 
     def perform_update(self, serializer):
-        print("🔍 Updating recipient with data:", dict(self.request.data))  # Debug line
+        print("🔍 Updating recipient with data:", dict(self.request.data))
         instance = self.get_object()
         
         # Handle cheque data for updates
@@ -247,6 +277,6 @@ class RecipientViewSet(viewsets.ModelViewSet):
             account=self.request.user.account, 
             cheque=cheque if cheque else instance.cheque
         )
-        print("✅ Updated recipient:", updated_instance.id, "with cheque:", updated_instance.cheque)  # Debug line
+        print("✅ Updated recipient:", updated_instance.id, "with cheque:", updated_instance.cheque)
         log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {updated_instance.amount}", 'Recipient', str(updated_instance.id))
-        
+ 
