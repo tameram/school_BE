@@ -52,7 +52,7 @@ class Student(models.Model):
     birthdate = models.DateField(null=True, blank=True)
     school_class = models.ForeignKey('students.SchoolClass', on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     date_of_registration = models.DateField(null=True, blank=True)
-    is_archived = models.BooleanField(default=False, null=True, blank=True)
+    is_archived = models.BooleanField(default=False, blank=True)
 
     is_bus_joined = models.BooleanField(null=True, blank=True)
     bus = models.ForeignKey('students.Bus', on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
