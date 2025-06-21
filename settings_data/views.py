@@ -180,13 +180,31 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
     def default_fee(self, request):
         if request.method == 'GET':
             try:
-                fee = SchoolFee.objects.get(account=request.user.account, school_class__isnull=True, student__isnull=True)
+                fee = SchoolFee.objects.get(
+                    account=request.user.account, 
+                    school_class__isnull=True, 
+                    student__isnull=True
+                )
                 serializer = self.get_serializer(fee)
                 return Response(serializer.data)
             except SchoolFee.DoesNotExist:
-                return Response({"detail": "No default fee found."}, status=404)
+                # Return default values with zeros instead of 404
+                default_data = {
+                    'id': None,
+                    'school_fee': 0.00,
+                    'books_fee': 0.00,
+                    'trans_fee': 0.00,
+                    'clothes_fee': 0.00,
+                    'school_class': None,
+                    'student': None,
+                    'school_year': None,
+                    'created_at': None,
+                    'year': None
+                }
+                return Response(default_data, status=status.HTTP_200_OK)
+        
         if request.method == 'PUT':
-            fee, _ = SchoolFee.objects.get_or_create(
+            fee, created = SchoolFee.objects.get_or_create(
                 account=request.user.account,
                 school_class=None,
                 student=None,
@@ -198,10 +216,11 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                 log_activity(
                     user=request.user,
                     account=request.user.account,
-                    note="تم تعديل الرسوم الافتراضية",
+                    note="تم تعديل الرسوم الافتراضية" if not created else "تم إنشاء الرسوم الافتراضية",
                     related_model='SchoolFee',
                     related_id=str(updated.id)
                 )
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
