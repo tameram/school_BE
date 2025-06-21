@@ -47,6 +47,82 @@ class StudentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("رقم الهاتف الثاني يجب أن يكون 10 أرقام ويبدأ بـ 0")
         return value
 
+    def validate_is_archived(self, value):
+        """
+        Validate that student can only be archived if they don't have outstanding payments
+        """
+        # Only validate when trying to set is_archived to True
+        if value is True and self.instance:
+            student = self.instance
+            
+            # Get the active school year
+            active_year = SchoolYear.objects.filter(
+                account=student.account, 
+                is_active=True
+            ).first()
+            
+            if active_year:
+                # Calculate total paid for current year
+                total_paid = Recipient.objects.filter(
+                    student=student, 
+                    school_year=active_year
+                ).aggregate(total=models.Sum('amount'))['total'] or 0
+
+                # Find applicable school fee with fallback logic
+                school_fee = SchoolFee.objects.filter(
+                    student=student, 
+                    school_year=active_year
+                ).first()
+
+                if not school_fee and student.school_class:
+                    school_fee = SchoolFee.objects.filter(
+                        school_class=student.school_class,
+                        student__isnull=True,
+                        school_year=active_year
+                    ).first()
+                    
+                if not school_fee:
+                    school_fee = SchoolFee.objects.filter(
+                        school_class__isnull=True,
+                        student__isnull=True,
+                        school_year=active_year
+                    ).first()
+
+                # Calculate total required fee
+                if school_fee:
+                    total_fee = sum([
+                        school_fee.school_fee or 0,
+                        school_fee.books_fee or 0,
+                        school_fee.trans_fee or 0,
+                        school_fee.clothes_fee or 0
+                    ])
+                    
+                    # Check if there are outstanding payments
+                    outstanding_amount = total_fee - total_paid
+                    
+                    if outstanding_amount > 0:
+                        raise serializers.ValidationError(
+                            f"لا يمكن أرشفة الطالب لوجود مستحقات غير مدفوعة بقيمة {outstanding_amount:.2f}. "
+                            f"يجب تسوية المستحقات أو إغلاق الحساب أولاً."
+                        )
+        
+        return value
+
+    def validate(self, data):
+        """
+        Additional cross-field validation for archiving
+        """
+        # Check if student is being archived and has bus assignment
+        if (data.get('is_archived') is True and 
+            self.instance and 
+            (self.instance.is_bus_joined or self.instance.bus)):
+            
+            # Optionally, you might want to warn about bus assignment
+            # or automatically remove bus assignment when archiving
+            pass
+        
+        return data
+
     def get_attachment_url(self, obj):
         """Return the full URL for the attachment file"""
         if obj.attachment:
@@ -137,7 +213,6 @@ class StudentSerializer(serializers.ModelSerializer):
             }
 
         return None
-
 
 class StudentBasicSerializer(serializers.ModelSerializer):
     class Meta:
