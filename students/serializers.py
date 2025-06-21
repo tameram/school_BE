@@ -22,7 +22,8 @@ class StudentSerializer(serializers.ModelSerializer):
     school_fees = serializers.SerializerMethodField()
     school_fees_by_year = serializers.SerializerMethodField()
     payment_summary = serializers.SerializerMethodField()
-    attachment_url = serializers.SerializerMethodField()  # For file URL
+    attachment_url = serializers.SerializerMethodField()
+    is_archived = serializers.SerializerMethodField()
     
     class Meta:
         model = Student
@@ -46,6 +47,9 @@ class StudentSerializer(serializers.ModelSerializer):
         if value and not value.startswith('0') or (value and len(value) != 10):
             raise serializers.ValidationError("رقم الهاتف الثاني يجب أن يكون 10 أرقام ويبدأ بـ 0")
         return value
+    
+    def get_is_archived(self, obj):
+        return obj.is_archived if obj.is_archived is not None else False
 
     def get_attachment_url(self, obj):
         """Return the full URL for the attachment file"""
