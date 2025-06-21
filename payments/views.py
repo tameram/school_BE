@@ -129,6 +129,7 @@ class RecipientViewSet(viewsets.ModelViewSet):
     serializer_class = RecipientSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['student', 'school_fee', 'payment_type']
+    parser_classes = (MultiPartParser, FormParser)  # Add this line
 
     def get_queryset(self):
         account = self.request.user.account
@@ -145,14 +146,56 @@ class RecipientViewSet(viewsets.ModelViewSet):
         return queryset
 
     def handle_cheque_data(self, request):
-        cheque_fields = ['bank_number', 'branch_number', 'account_number', 'cheque_date']
-        cheque_data = {f: request.data.get(f'cheque_details.{f}') for f in cheque_fields}
-        if any(cheque_data.values()):
+        """Handle cheque data from multipart form data - FIXED VERSION"""
+        print("🔍 Debug: Incoming request data:", dict(request.data))  # Debug line
+        
+        # ✅ FIX: Handle both nested and flat field formats
+        cheque_data = {}
+        
+        # Try nested format first (cheque_details.field_name)
+        nested_fields = {
+            'bank_number': request.data.get('cheque_details.bank_number'),
+            'branch_number': request.data.get('cheque_details.branch_number'), 
+            'account_number': request.data.get('cheque_details.account_number'),
+            'cheque_date': request.data.get('cheque_details.cheque_date'),
+            'cheque_number': request.data.get('cheque_details.cheque_number'),
+            'description': request.data.get('cheque_details.description')  # ✅ Added this
+        }
+        
+        # Try flat format as fallback (direct field names)
+        flat_fields = {
+            'bank_number': request.data.get('bankNumber'),
+            'branch_number': request.data.get('branchNumber'),
+            'account_number': request.data.get('accountNumber'), 
+            'cheque_date': request.data.get('chequeDueDate'),
+            'cheque_number': request.data.get('chequeNumber'),
+            'description': request.data.get('description') or request.data.get('note')  # ✅ Added this
+        }
+        
+        # Use nested if available, otherwise fall back to flat
+        for field in ['bank_number', 'branch_number', 'account_number', 'cheque_date', 'cheque_number', 'description']:
+            if nested_fields[field]:
+                cheque_data[field] = nested_fields[field]
+            elif flat_fields[field]:
+                cheque_data[field] = flat_fields[field]
+        
+        print("🔍 Debug: Processed cheque data:", cheque_data)  # Debug line
+        
+        # Only create cheque if at least one field has data
+        if any(value for value in cheque_data.values() if value):
             cheque = ChequeDetail.objects.create(**cheque_data)
-            if 'cheque_details.cheque_image' in request.FILES:
-                cheque.cheque_image = request.FILES['cheque_details.cheque_image']
+            
+            # Handle image upload
+            image_file = (request.FILES.get('cheque_details.cheque_image') or 
+                         request.FILES.get('chequeImage'))
+            if image_file:
+                cheque.cheque_image = image_file
                 cheque.save()
+                
+            print("✅ Created cheque:", cheque.id, "with data:", cheque_data)  # Debug line
             return cheque
+            
+        print("❌ No cheque data found")  # Debug line
         return None
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -170,11 +213,40 @@ class RecipientViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
+        print("🔍 Creating recipient with data:", dict(self.request.data))  # Debug line
         cheque = self.handle_cheque_data(self.request)
-        instance = serializer.save(account=self.request.user.account, created_by=self.request.user, cheque=cheque)
+        instance = serializer.save(
+            account=self.request.user.account, 
+            created_by=self.request.user, 
+            cheque=cheque
+        )
+        print("✅ Created recipient:", instance.id, "with cheque:", instance.cheque)  # Debug line
         log_activity(self.request.user, self.request.user.account, f"تم إنشاء سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
 
     def perform_update(self, serializer):
+        print("🔍 Updating recipient with data:", dict(self.request.data))  # Debug line
+        instance = self.get_object()
+        
+        # Handle cheque data for updates
         cheque = self.handle_cheque_data(self.request)
-        instance = serializer.save(account=self.request.user.account, cheque=cheque)
-        log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {instance.amount}", 'Recipient', str(instance.id))
+        
+        # If we have new cheque data, use it; otherwise keep existing
+        if cheque:
+            # If there was an existing cheque and we're creating a new one, 
+            # we might want to update the existing one instead
+            if instance.cheque:
+                # Update existing cheque
+                for field in ['bank_number', 'branch_number', 'account_number', 'cheque_date', 'cheque_number', 'description']:
+                    if hasattr(cheque, field):
+                        setattr(instance.cheque, field, getattr(cheque, field))
+                instance.cheque.save()
+                cheque.delete()  # Remove the temporary cheque we created
+                cheque = instance.cheque
+            
+        updated_instance = serializer.save(
+            account=self.request.user.account, 
+            cheque=cheque if cheque else instance.cheque
+        )
+        print("✅ Updated recipient:", updated_instance.id, "with cheque:", updated_instance.cheque)  # Debug line
+        log_activity(self.request.user, self.request.user.account, f"تم تعديل سند صرف بمبلغ {updated_instance.amount}", 'Recipient', str(updated_instance.id))
+        

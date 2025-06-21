@@ -55,6 +55,8 @@ class ChequeDetail(models.Model):
     cheque_number = models.CharField(max_length=30, null=True, blank=True)
     cheque_date = models.DateField(null=True, blank=True)
     cheque_image = models.ImageField(upload_to='cheques/', null=True, blank=True)
+    description = models.TextField(null=True, blank=True, help_text="Additional notes or description for the cheque")
+
 
     def __str__(self):
         return f"Cheque {self.id} ({self.cheque_date})"
