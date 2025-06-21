@@ -46,6 +46,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)  # This sets self.user
+        full_name = f"{self.user.first_name} {self.user.last_name}".strip()
 
         account = self.user.account  # ✅ Now safe to use
         data['user'] = {
@@ -54,6 +55,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'email': self.user.email,
             'role': self.user.role,
             'account_id': self.user.account_id,
+            'full_name': full_name,
         }
         data['role'] = self.user.role
         data['school'] = {
@@ -70,7 +72,7 @@ class MeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'role', 'account']
+        fields = ['id', 'username', 'email', 'role', 'account', 'first_name', 'last_name', 'phone']
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
