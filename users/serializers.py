@@ -69,10 +69,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
 class MeSerializer(serializers.ModelSerializer):
     account = AccountUpdateSerializer()
+    full_name = serializers.CharField(source='get_full_name', read_only=True)
 
     class Meta:
         model = CustomUser
-        fields = ['id', 'username', 'email', 'role', 'account', 'first_name', 'last_name', 'phone']
+        fields = ['id', 'username', 'email', 'role', 'account', 'full_name', 'phone']
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
