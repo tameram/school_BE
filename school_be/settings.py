@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-4=l&9nvv*^rr$vugaemivz^sq=+(e(ijyetcbu*i!v(t@!)9!$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['daftar-noon.com', 'www.daftar-noon.com', '51.16.24.229', 'localhost', '127.0.0.1']
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -80,8 +80,12 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
+    "https://daftar-noon.com",
+    "http://daftar-noon.com",
+    "https://www.daftar-noon.com",
+    "http://www.daftar-noon.com",
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://51.16.24.229",
 ]
 
 MIDDLEWARE = [
