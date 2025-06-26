@@ -101,6 +101,7 @@ CORS_ALLOWED_ORIGINS = [
     'http://daftar-noon.com',
     'http://www.daftar-noon.com',
     'http://localhost:3000',
+    'http://51.16.24.229',
 ]
 
 CORS_ALLOW_CREDENTIALS = True
