@@ -19,9 +19,15 @@ class AccountUpdateSerializer(serializers.ModelSerializer):
             'address', 'logo', 'start_school_date', 'end_school_date'
         ]
 
+# accounts/serializers.py - Update your CustomTokenObtainPairSerializer
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
+        # ✅ STRICT: Check account exists before creating token
+        if not user.account:
+            raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
+        
         token = super().get_token(user)
 
         # Add custom claims
@@ -46,9 +52,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)  # This sets self.user
+        
+        # ✅ STRICT: Double-check account exists (redundant but safe)
+        if not self.user.account:
+            raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
+        
         full_name = f"{self.user.first_name} {self.user.last_name}".strip()
+        account = self.user.account  # Now guaranteed to exist
 
-        account = self.user.account  # ✅ Now safe to use
         data['user'] = {
             'id': self.user.id,
             'username': self.user.username,
@@ -59,10 +70,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         data['role'] = self.user.role
         data['school'] = {
-            'name': account.school_name,
-            'address': account.address,
-            'email': account.email,
-            'phone_number': account.phone_number,
+            'name': account.school_name or 'غير محدد',
+            'address': account.address or '',
+            'email': account.email or '',
+            'phone_number': account.phone_number or '',
             'logo': account.logo.url if account.logo else None,
         }
         return data
