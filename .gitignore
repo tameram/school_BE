@@ -12,3 +12,5 @@ db.sqlite3
 */migrations/*.py
 */migrations/__pycache__/
 /media
+
+*venv*

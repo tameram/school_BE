@@ -4,6 +4,10 @@ from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from datetime import date
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import StudentDocument
+from .serializers import StudentDocumentSerializer
 
 from .models import Student, SchoolClass, StudentHistory, Bus, StudentPaymentHistory
 from .serializers import (
@@ -519,4 +523,107 @@ def close_student_account(request, id):
         return Response({
             "error": "حدث خطأ أثناء إغلاق الحساب",
             "details": str(e) if hasattr(request.user, 'is_superuser') and request.user.is_superuser else None
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_student_document(request, student_id):
+    """Upload a document for a specific student"""
+    try:
+        student = Student.objects.get(id=student_id, account=request.user.account)
+        
+        document_type = request.data.get('document_type')
+        document_file = request.FILES.get('document')
+        description = request.data.get('description', '')
+        
+        if not document_type or not document_file:
+            return Response({
+                'error': 'نوع الوثيقة والملف مطلوبان'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if document type already exists for this student
+        existing_doc = StudentDocument.objects.filter(
+            student=student, 
+            document_type=document_type
+        ).first()
+        
+        if existing_doc:
+            # Update existing document
+            existing_doc.document = document_file
+            existing_doc.description = description
+            existing_doc.uploaded_by = request.user
+            existing_doc.save()
+            document = existing_doc
+        else:
+            # Create new document
+            document = StudentDocument.objects.create(
+                student=student,
+                document_type=document_type,
+                document=document_file,
+                description=description,
+                uploaded_by=request.user
+            )
+        
+        serializer = StudentDocumentSerializer(document, context={'request': request})
+        
+        log_activity(
+            user=request.user,
+            account=request.user.account,
+            note=f"تم رفع وثيقة {document.get_document_type_display()} للطالب {student.first_name} {student.second_name}",
+            related_model='StudentDocument',
+            related_id=str(document.id)
+        )
+        
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+    except Student.DoesNotExist:
+        return Response({
+            'error': 'الطالب غير موجود'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': 'حدث خطأ أثناء رفع الوثيقة',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_student_document(request, document_id):
+    """Delete a student document"""
+    try:
+        document = StudentDocument.objects.get(
+            id=document_id, 
+            student__account=request.user.account
+        )
+        
+        # Delete from S3
+        if document.document:
+            s3_manager = S3FileManager()
+            s3_manager.delete_file(document.document.name)
+        
+        student_name = f"{document.student.first_name} {document.student.second_name}"
+        doc_type = document.get_document_type_display()
+        
+        document.delete()
+        
+        log_activity(
+            user=request.user,
+            account=request.user.account,
+            note=f"تم حذف وثيقة {doc_type} للطالب {student_name}",
+            related_model='StudentDocument',
+            related_id=str(document.id)
+        )
+        
+        return Response({
+            'message': 'تم حذف الوثيقة بنجاح'
+        }, status=status.HTTP_200_OK)
+        
+    except StudentDocument.DoesNotExist:
+        return Response({
+            'error': 'الوثيقة غير موجودة'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'error': 'حدث خطأ أثناء حذف الوثيقة'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

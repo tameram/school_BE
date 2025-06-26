@@ -1,6 +1,8 @@
 from django.db import models
 import uuid
 from users.models import Account, CustomUser
+from utils.file_handlers import student_documents_path
+
 
 
 class SchoolClass(models.Model):
@@ -65,13 +67,44 @@ class Student(models.Model):
     note = models.TextField(null=True, blank=True)
     
     # File upload field for documents/images
-    attachment = models.FileField(upload_to='student_attachments/', null=True, blank=True)
+    attachment = models.FileField(
+        upload_to=student_documents_path, 
+        null=True, 
+        blank=True,
+        help_text="Student profile document (ID, photo, etc.)"
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey('users.CustomUser', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.first_name} {self.second_name or ''}".strip()
+
+class StudentDocument(models.Model):
+    DOCUMENT_TYPES = [
+        ('id_card', 'بطاقة هوية'),
+        ('birth_certificate', 'شهادة ميلاد'),
+        ('medical_record', 'سجل طبي'),
+        ('photo', 'صورة شخصية'),
+        ('previous_grades', 'درجات سابقة'),
+        ('transfer_certificate', 'شهادة نقل'),
+        ('parent_id', 'هوية ولي الأمر'),
+        ('other', 'أخرى'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey('Student', on_delete=models.CASCADE, related_name='documents')
+    document_type = models.CharField(max_length=50, choices=DOCUMENT_TYPES)
+    document = models.FileField(upload_to='student_documents/', null=True, blank=True)
+    description = models.CharField(max_length=255, null=True, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.student} - {self.get_document_type_display()}"
+    
+    class Meta:
+        unique_together = ['student', 'document_type'] 
 
 
 class StudentHistory(models.Model):

@@ -1,7 +1,9 @@
 from rest_framework import serializers
+from utils.s3_utils import S3FileManager
+
 
 from payments.serializers import PaymentSerializer, RecipientSerializer
-from .models import Student, SchoolClass, StudentHistory, Bus
+from .models import Student, SchoolClass, StudentHistory, Bus, StudentDocument
 from rest_framework import generics
 from payments.models import Recipient
 from settings_data.serializers import SchoolFeeSerializer
@@ -15,6 +17,24 @@ class StudentHistorySerializer(serializers.ModelSerializer):
         model = StudentHistory
         fields = ['id', 'event', 'note', 'date']
 
+class StudentDocumentSerializer(serializers.ModelSerializer):
+    document_url = serializers.SerializerMethodField()
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    
+    class Meta:
+        model = StudentDocument
+        fields = ['id', 'document_type', 'document_type_display', 'document', 'document_url', 
+                 'description', 'uploaded_at']
+    
+    def get_document_url(self, obj):
+        """Return the full URL for the document file"""
+        if obj.document:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document.url)
+            return obj.document.url
+        return None
+
 
 class StudentSerializer(serializers.ModelSerializer):
     history = StudentHistorySerializer(many=True, read_only=True)
@@ -22,7 +42,8 @@ class StudentSerializer(serializers.ModelSerializer):
     school_fees = serializers.SerializerMethodField()
     school_fees_by_year = serializers.SerializerMethodField()
     payment_summary = serializers.SerializerMethodField()
-    attachment_url = serializers.SerializerMethodField()  # For file URL
+    documents = StudentDocumentSerializer(many=True, read_only=True)
+    attachment_url = serializers.SerializerMethodField()
     
     class Meta:
         model = Student
@@ -124,12 +145,10 @@ class StudentSerializer(serializers.ModelSerializer):
         return data
 
     def get_attachment_url(self, obj):
-        """Return the full URL for the attachment file"""
+        """Generate secure URL for main attachment"""
         if obj.attachment:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.attachment.url)
-            return obj.attachment.url
+            s3_manager = S3FileManager()
+            return s3_manager.generate_presigned_url(obj.attachment.name)
         return None
     
     def get_school_fees_by_year(self, student):
