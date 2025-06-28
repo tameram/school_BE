@@ -1,6 +1,11 @@
 import uuid
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from utils.file_handlers import general_documents_path
+from utils.storage_backends import MediaStorage
+from utils.file_handlers import logo_path
+
+
 
 class Account(models.Model):
     name = models.CharField(max_length=255, null=True, blank=True)
@@ -8,10 +13,19 @@ class Account(models.Model):
     email = models.EmailField(null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     school_name = models.CharField(max_length=255, null=True, blank=True)
-    logo = models.ImageField(upload_to='logos/', null=True, blank=True)
-    start_school_date = models.DateField(null=True, blank=True)  # ✅ NEW
-    end_school_date = models.DateField(null=True, blank=True)    # ✅ NEW
-    join_date = models.DateField(null=True, blank=True)    # ✅ NEW
+    
+    # ✅ Updated to use S3 storage
+    logo = models.ImageField(
+        upload_to=logo_path,
+        storage=MediaStorage(),
+        null=True, 
+        blank=True,
+        help_text="School/Account logo"
+    )
+    
+    start_school_date = models.DateField(null=True, blank=True)
+    end_school_date = models.DateField(null=True, blank=True)
+    join_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):

@@ -2,48 +2,175 @@ import os
 from django.utils.deconstruct import deconstructible
 
 
-@deconstructible
-class CustomUploadPath:
-    def __init__(self, sub_path):
-        self.sub_path = sub_path
+def clean_name(name):
+    """Clean name for use in file paths"""
+    if not name:
+        return 'unknown'
+    clean = "".join(c for c in str(name) if c.isalnum() or c in (' ', '-', '_')).strip()
+    return clean.replace(' ', '_') or 'unknown'
 
-    def __call__(self, instance, filename):
-        # Get account name safely
-        if hasattr(instance, 'account') and instance.account:
-            account_name = instance.account.name or str(instance.account.id)
-        else:
-            account_name = 'default'
-        
-        # Clean account name for file path
-        account_name = "".join(c for c in account_name if c.isalnum() or c in (' ', '-', '_')).strip()
-        account_name = account_name.replace(' ', '_') or 'default'
-        
-        # Determine user type and ID based on instance
-        if hasattr(instance, 'student') and instance.student:
-            user_id = str(instance.student.student_id)
-            user_type = 'student'
-        elif hasattr(instance, 'employee') and instance.employee:
-            user_id = str(instance.employee.id)
-            user_type = 'employee'
-        elif hasattr(instance, 'id') and str(type(instance).__name__).lower() == 'student':
-            # For direct student uploads
-            user_id = str(instance.id)
-            user_type = 'student'
-        else:
-            user_id = 'unknown'
-            user_type = 'general'
-        
-        # Clean filename
-        name, ext = os.path.splitext(filename)
-        safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_')).strip()
-        safe_name = safe_name.replace(' ', '_') or 'file'
-        safe_filename = f"{safe_name}{ext}"
-        
-        # Create path: account_name/category/user_type/user_id/filename
-        return f"{account_name}/{self.sub_path}/{user_type}/{user_id}/{safe_filename}"
+
+def get_account_name(instance):
+    """Get account name from instance"""
+    if hasattr(instance, 'account') and instance.account:
+        return clean_name(instance.account.name or str(instance.account.id))
+    return 'default'
+
+
+@deconstructible
+class StudentDocumentPath:
+    """Path: media/{account_name}/students/{student_id}/"""
     
-student_documents_path = CustomUploadPath('students')
-payment_documents_path = CustomUploadPath('payments')
-receipt_documents_path = CustomUploadPath('receipts')
-employee_documents_path = CustomUploadPath('employees')
-general_documents_path = CustomUploadPath('general')
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        
+        # For StudentDocument model
+        if hasattr(instance, 'student') and instance.student:
+            student_id = clean_name(instance.student.student_id or instance.student.id)
+        # For Student model direct upload
+        else:
+            student_id = clean_name(instance.student_id or instance.id)
+        
+        safe_filename = clean_name(os.path.splitext(filename)[0]) + os.path.splitext(filename)[1]
+        return f"{account_name}/students/{student_id}/{safe_filename}"
+
+
+@deconstructible
+class EmployeeDocumentPath:
+    """Path: media/{account_name}/employees/{employee_id}/"""
+    
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        
+        # For EmployeeDocument model
+        if hasattr(instance, 'employee') and instance.employee:
+            employee_id = clean_name(instance.employee.employee_id or instance.employee.id)
+        # For Employee model direct upload
+        else:
+            employee_id = clean_name(instance.employee_id or instance.id)
+        
+        safe_filename = clean_name(os.path.splitext(filename)[0]) + os.path.splitext(filename)[1]
+        return f"{account_name}/employees/{employee_id}/{safe_filename}"
+
+
+@deconstructible
+class RecipientChequePath:
+    """Path: media/{account_name}/students/{student_id}/recipient/"""
+    
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        student_id = clean_name(instance.student.student_id or instance.student.id)
+        
+        # Use recipient number as filename
+        recipient_number = instance.number or 'unknown'
+        ext = os.path.splitext(filename)[1]
+        safe_filename = f"{recipient_number}{ext}"
+        
+        return f"{account_name}/students/{student_id}/recipient/{safe_filename}"
+
+
+@deconstructible
+class PaymentChequePath:
+    """Dynamic path based on payment recipient type"""
+    
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        
+        # For ChequeDetail, we need to find the related payment
+        if hasattr(instance, 'payments') and instance.payments.exists():
+            # Get the first payment using this cheque
+            payment = instance.payments.first()
+        elif hasattr(instance, 'recipients') and instance.recipients.exists():
+            # Get the first recipient using this cheque
+            recipient = instance.recipients.first()
+            student_id = clean_name(recipient.student.student_id or recipient.student.id)
+            recipient_number = recipient.number or 'unknown'
+            ext = os.path.splitext(filename)[1]
+            safe_filename = f"{recipient_number}{ext}"
+            return f"{account_name}/students/{student_id}/recipient/{safe_filename}"
+        else:
+            # Fallback for direct cheque upload
+            payment_number = getattr(instance, 'number', 'unknown')
+            ext = os.path.splitext(filename)[1]
+            safe_filename = f"{payment_number}{ext}"
+            return f"{account_name}/generalPayments/{safe_filename}"
+        
+        # Handle payment-based routing
+        payment_number = payment.number or 'unknown'
+        ext = os.path.splitext(filename)[1]
+        safe_filename = f"{payment_number}{ext}"
+        
+        # Determine path based on recipient type
+        if payment.recipient_employee:
+            employee_id = clean_name(payment.recipient_employee.employee_id or payment.recipient_employee.id)
+            return f"{account_name}/employees/{employee_id}/Payment/{safe_filename}"
+        
+        elif payment.recipient_bus:
+            bus_number = clean_name(payment.recipient_bus.bus_number or payment.recipient_bus.id)
+            return f"{account_name}/buses/{bus_number}/Payment/{safe_filename}"
+        
+        elif payment.recipient_authorized:
+            authorized_name = clean_name(payment.recipient_authorized.name or payment.recipient_authorized.id)
+            return f"{account_name}/authorized/{authorized_name}/Payment/{safe_filename}"
+        
+        else:
+            return f"{account_name}/generalPayments/{safe_filename}"
+
+
+@deconstructible
+class PaymentDocumentPath:
+    """Path for PaymentDocument model based on related payment or recipient"""
+    
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        safe_filename = clean_name(os.path.splitext(filename)[0]) + os.path.splitext(filename)[1]
+        
+        if instance.payment:
+            # Use payment's logic for path determination
+            payment = instance.payment
+            
+            if payment.recipient_employee:
+                employee_id = clean_name(payment.recipient_employee.employee_id or payment.recipient_employee.id)
+                return f"{account_name}/employees/{employee_id}/Payment/{safe_filename}"
+            
+            elif payment.recipient_bus:
+                bus_number = clean_name(payment.recipient_bus.bus_number or payment.recipient_bus.id)
+                return f"{account_name}/buses/{bus_number}/Payment/{safe_filename}"
+            
+            elif payment.recipient_authorized:
+                authorized_name = clean_name(payment.recipient_authorized.name or payment.recipient_authorized.id)
+                return f"{account_name}/authorized/{authorized_name}/Payment/{safe_filename}"
+            
+            else:
+                return f"{account_name}/generalPayments/{safe_filename}"
+        
+        elif instance.recipient:
+            # For recipient documents
+            student_id = clean_name(instance.recipient.student.student_id or instance.recipient.student.id)
+            return f"{account_name}/students/{student_id}/recipient/{safe_filename}"
+        
+        else:
+            return f"{account_name}/generalPayments/{safe_filename}"
+
+
+@deconstructible
+class LogoPath:
+    """Path: media/{account_name}/"""
+    
+    def __call__(self, instance, filename):
+        account_name = get_account_name(instance)
+        safe_filename = clean_name(os.path.splitext(filename)[0]) + os.path.splitext(filename)[1]
+        return f"{account_name}/{safe_filename}"
+
+
+# Create instances for use in models
+student_documents_path = StudentDocumentPath()
+employee_documents_path = EmployeeDocumentPath()
+recipient_cheque_path = RecipientChequePath()
+payment_cheque_path = PaymentChequePath()
+payment_documents_path = PaymentDocumentPath()
+logo_path = LogoPath()
+
+# Legacy compatibility - keep these for any existing imports
+receipt_documents_path = PaymentDocumentPath()
+general_documents_path = LogoPath()

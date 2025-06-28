@@ -3,8 +3,7 @@ from pytz import timezone as pytz_timezone, UTC
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 import logging
 from rest_framework import serializers
-from .models import CustomUser
-from .models import Account
+from .models import CustomUser, Account
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_decode
 
@@ -12,19 +11,51 @@ logger = logging.getLogger(__name__)
 
 
 class AccountUpdateSerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Account
         fields = [
             'school_name', 'phone_number', 'email',
-            'address', 'logo', 'start_school_date', 'end_school_date'
+            'address', 'logo', 'logo_url', 'start_school_date', 'end_school_date'
         ]
+    
+    def get_logo_url(self, obj):
+        """Generate URL for logo with error handling"""
+        if not obj.logo:
+            return None
+        
+        try:
+            # Method 1: Use Django's built-in URL generation
+            url = obj.logo.url
+            logger.info(f"Django generated URL for account {obj.id}: {url}")
+            return url
+            
+        except Exception as e:
+            logger.error(f"Error getting Django URL for account {obj.id}: {e}")
+            
+            # Method 2: Manual construction as fallback
+            try:
+                file_path = obj.logo.name
+                
+                if not file_path.startswith('media/'):
+                    file_path = f"media/{file_path}"
+                
+                base_url = "https://daftar-noon.s3.il-central-1.amazonaws.com/"
+                manual_url = f"{base_url}{file_path}"
+                
+                logger.info(f"Manual URL for account {obj.id}: {manual_url}")
+                return manual_url
+                
+            except Exception as manual_error:
+                logger.error(f"Manual URL generation failed for account {obj.id}: {manual_error}")
+                return None
 
-# accounts/serializers.py - Update your CustomTokenObtainPairSerializer
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
-        # ✅ STRICT: Check account exists before creating token
+        # STRICT: Check account exists before creating token
         if not user.account:
             raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
         
@@ -53,7 +84,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         data = super().validate(attrs)  # This sets self.user
         
-        # ✅ STRICT: Double-check account exists (redundant but safe)
+        # STRICT: Double-check account exists (redundant but safe)
         if not self.user.account:
             raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
         
@@ -74,10 +105,30 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'address': account.address or '',
             'email': account.email or '',
             'phone_number': account.phone_number or '',
-            'logo': account.logo.url if account.logo else None,
+            # ✅ Updated to use logo_url method with proper context
+            'logo': self._get_logo_url(account),
         }
         return data
     
+    def _get_logo_url(self, account):
+        """Helper method to get logo URL"""
+        if not account.logo:
+            return None
+        
+        try:
+            return account.logo.url
+        except Exception as e:
+            logger.error(f"Error getting logo URL for account {account.id}: {e}")
+            # Fallback to manual construction
+            try:
+                file_path = account.logo.name
+                if not file_path.startswith('media/'):
+                    file_path = f"media/{file_path}"
+                return f"https://daftar-noon.s3.il-central-1.amazonaws.com/{file_path}"
+            except Exception:
+                return None
+    
+
 class MeSerializer(serializers.ModelSerializer):
     account = AccountUpdateSerializer()
     full_name = serializers.CharField(source='get_full_name', read_only=True)
@@ -105,6 +156,13 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         user.set_password(data['new_password'])
         user.save()
         return data
-    
 
+
+class PasswordResetSerializer(serializers.Serializer):
+    new_password = serializers.CharField()
+
+    def validate_new_password(self, value):
+        if len(value) < 8 or not any(c.isdigit() for c in value) or not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على رقم وحرف")
+        return value
 
