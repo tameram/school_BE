@@ -2,10 +2,32 @@ from rest_framework import serializers
 from datetime import date
 from django.db.models import Sum, Q
 from decimal import Decimal
+import logging
 
-from .models import Employee, EmployeeHistory, EmployeeVirtualTransaction
+from .models import Employee, EmployeeHistory, EmployeeVirtualTransaction, EmployeeDocument
 from payments.models import Payment
 from payments.serializers import PaymentSerializer, SimplePaymentSerializer
+
+logger = logging.getLogger(__name__)
+
+
+class EmployeeDocumentSerializer(serializers.ModelSerializer):
+    document_url = serializers.SerializerMethodField()
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+    
+    class Meta:
+        model = EmployeeDocument
+        fields = ['id', 'document_type', 'document_type_display', 'document', 'document_url', 
+                 'description', 'uploaded_at']
+    
+    def get_document_url(self, obj):
+        """Return the full URL for the document file"""
+        if obj.document:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.document.url)
+            return obj.document.url
+        return None
 
 
 class EmployeeHistorySerializer(serializers.ModelSerializer):
@@ -25,38 +47,83 @@ class EmployeeSerializer(serializers.ModelSerializer):
     history = EmployeeHistorySerializer(many=True, read_only=True)
     payments = PaymentSerializer(many=True, read_only=True)
     virtual_transactions = EmployeeVirtualTransactionSerializer(many=True, read_only=True)
+    documents = EmployeeDocumentSerializer(many=True, read_only=True)
 
     is_teacher = serializers.SerializerMethodField()
     is_driver = serializers.SerializerMethodField()
     total_paid_this_month = serializers.SerializerMethodField()
     outstanding_balance_current_month = serializers.SerializerMethodField()
+    
+    # File URL fields
+    contract_pdf_url = serializers.SerializerMethodField()
+    profile_picture_url = serializers.SerializerMethodField()
+    id_copy_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         exclude = ['account', 'created_by']
 
+    def get_contract_pdf_url(self, obj):
+        """Generate URL for contract PDF"""
+        return self._get_file_url(obj.contract_pdf)
+    
+    def get_profile_picture_url(self, obj):
+        """Generate URL for profile picture"""
+        return self._get_file_url(obj.profile_picture)
+    
+    def get_id_copy_url(self, obj):
+        """Generate URL for ID copy"""
+        return self._get_file_url(obj.id_copy)
+    
+    def _get_file_url(self, file_field):
+        """Helper method to generate file URLs with error handling"""
+        if not file_field:
+            return None
+        
+        try:
+            # Method 1: Use Django's built-in URL generation
+            url = file_field.url
+            logger.info(f"Django generated URL: {url}")
+            return url
+            
+        except Exception as e:
+            logger.error(f"Error getting Django URL: {e}")
+            
+            # Method 2: Manual construction as fallback
+            try:
+                file_path = file_field.name
+                
+                if not file_path.startswith('media/'):
+                    file_path = f"media/{file_path}"
+                
+                base_url = "https://daftar-noon.s3.il-central-1.amazonaws.com/"
+                manual_url = f"{base_url}{file_path}"
+                
+                logger.info(f"Manual URL: {manual_url}")
+                return manual_url
+                
+            except Exception as manual_error:
+                logger.error(f"Manual URL generation failed: {manual_error}")
+                return None
+
     def validate_employee_id(self, value):
         """
         Validate that employee_id is unique within the account.
-        Allow empty/null values but prevent duplicates of actual IDs.
         """
-        if not value:  # Allow empty employee_id
+        if not value:
             return value
 
-        # Get the current user's account from the serializer context
         request = self.context.get('request')
         if not request:
             raise serializers.ValidationError("لا يمكن التحقق من معرف الموظف")
 
         account = request.user.account
 
-        # Check for duplicates within the same account
         existing_query = Employee.objects.filter(
             employee_id=value,
             account=account
         )
 
-        # If this is an update (instance exists), exclude the current instance
         if self.instance:
             existing_query = existing_query.exclude(id=self.instance.id)
 
@@ -86,14 +153,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def get_outstanding_balance_current_month(self, obj):
         """
         Calculate the outstanding balance for the current month
-        Outstanding = (Base Salary + Virtual Credits - Virtual Debits) - Total Paid
         """
         today = date.today()
         
-        # Get base salary (monthly)
         base_salary = obj.base_salary or Decimal('0')
         
-        # Get virtual transactions for current month
         current_month_virtual = EmployeeVirtualTransaction.objects.filter(
             employee=obj,
             account=obj.account,
@@ -107,7 +171,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
         virtual_credits = current_month_virtual['credit_total'] or Decimal('0')
         virtual_debits = current_month_virtual['debit_total'] or Decimal('0')
         
-        # Get payments for current month
         current_month_payments = Payment.objects.filter(
             recipient_employee=obj,
             account=obj.account,
@@ -119,7 +182,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
         
         total_paid = current_month_payments['total_paid'] or Decimal('0')
         
-        # Calculate outstanding balance
         should_receive = base_salary + virtual_credits - virtual_debits
         outstanding_balance = should_receive - total_paid
         
@@ -129,13 +191,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
         """
         Custom validation to prevent archiving employees under certain conditions
         """
-        # Only validate if we're trying to archive the employee
         if attrs.get('is_archived') and self.instance:
             employee = self.instance
             
-            # 1. Check if employee is a teacher assigned to a class
+            # Check if employee is a teacher assigned to a class
             if employee.employee_type and employee.employee_type.is_teacher:
-                # Import here to avoid circular imports
                 from students.models import SchoolClass
                 
                 assigned_classes = SchoolClass.objects.filter(
@@ -149,9 +209,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
                         'is_archived': f'لا يمكن أرشفة المعلم لأنه مسؤول عن الفصول التالية: {", ".join(class_names)}'
                     })
             
-            # 2. Check if employee is a driver assigned to a bus
+            # Check if employee is a driver assigned to a bus
             if employee.employee_type and employee.employee_type.is_driver:
-                # Import here to avoid circular imports
                 from students.models import Bus
                 
                 assigned_buses = Bus.objects.filter(
@@ -165,13 +224,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
                         'is_archived': f'لا يمكن أرشفة السائق لأنه مسؤول عن الحافلات التالية: {", ".join(bus_names)}'
                     })
             
-            # 3. Check if employee has outstanding money for current month
+            # Check outstanding balance
             today = date.today()
-            
-            # Get base salary (monthly)
             base_salary = employee.base_salary or Decimal('0')
             
-            # Get virtual transactions for current month
             current_month_virtual = EmployeeVirtualTransaction.objects.filter(
                 employee=employee,
                 account=employee.account,
@@ -185,7 +241,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
             virtual_credits = current_month_virtual['credit_total'] or Decimal('0')
             virtual_debits = current_month_virtual['debit_total'] or Decimal('0')
             
-            # Get payments for current month
             current_month_payments = Payment.objects.filter(
                 recipient_employee=employee,
                 account=employee.account,
@@ -197,10 +252,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
             
             total_paid = current_month_payments['total_paid'] or Decimal('0')
             
-            # Calculate outstanding balance
-            # What employee should receive = base_salary + virtual_credits - virtual_debits
-            # What employee actually received = total_paid
-            # Outstanding = Should receive - Actually received
             should_receive = base_salary + virtual_credits - virtual_debits
             outstanding_balance = should_receive - total_paid
             
@@ -210,3 +261,4 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 })
         
         return attrs
+
