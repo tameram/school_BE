@@ -22,6 +22,8 @@ urlpatterns = [
     path('<uuid:id>/', StudentRetrieveUpdateView.as_view(), name='student-detail'),
     path('<uuid:id>/close-account/', close_student_account, name='close-student-account'),
     path('open-accounts/', students_with_open_accounts, name='students-open-accounts'),
+    path('unpaid/', students_with_open_accounts, name='students-unpaid'),
+
     
     # Classes
     path('classes/', SchoolClassListCreateView.as_view(), name='class-list-create'),

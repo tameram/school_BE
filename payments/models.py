@@ -7,6 +7,8 @@ from employees.models import Employee
 from utils.services import get_next_number
 from django.db import IntegrityError, transaction
 from users.models import Account, CustomUser
+from utils.file_handlers import payment_documents_path, receipt_documents_path
+from utils.storage_backends import MediaStorage
 
 
 def get_current_time():
@@ -54,12 +56,56 @@ class ChequeDetail(models.Model):
     account_number = models.CharField(max_length=30, null=True, blank=True)
     cheque_number = models.CharField(max_length=30, null=True, blank=True)
     cheque_date = models.DateField(null=True, blank=True)
-    cheque_image = models.ImageField(upload_to='cheques/', null=True, blank=True)
+    
+    # ✅ Updated to use S3 storage
+    cheque_image = models.ImageField(
+        upload_to=payment_documents_path,
+        storage=MediaStorage(),
+        null=True, 
+        blank=True,
+        help_text="Cheque image or scan"
+    )
+    
     description = models.TextField(null=True, blank=True, help_text="Additional notes or description for the cheque")
 
-
     def __str__(self):
-        return f"Cheque {self.id} ({self.cheque_date})"
+        return f"Cheque {self.cheque_number or self.id} ({self.cheque_date})"
+
+
+class PaymentDocument(models.Model):
+    """
+    Separate model for additional payment-related documents
+    """
+    DOCUMENT_TYPES = [
+        ('receipt', 'إيصال'),
+        ('invoice', 'فاتورة'),
+        ('contract', 'عقد'),
+        ('agreement', 'اتفاقية'),
+        ('bank_statement', 'كشف حساب'),
+        ('transfer_receipt', 'إيصال تحويل'),
+        ('other', 'أخرى'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payment = models.ForeignKey('Payment', on_delete=models.CASCADE, related_name='documents', null=True, blank=True)
+    recipient = models.ForeignKey('Recipient', on_delete=models.CASCADE, related_name='documents', null=True, blank=True)
+    document_type = models.CharField(max_length=50, choices=DOCUMENT_TYPES)
+    document = models.FileField(
+        upload_to=payment_documents_path,
+        storage=MediaStorage(),
+        null=True, 
+        blank=True
+    )
+    description = models.CharField(max_length=255, null=True, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+    
+    def __str__(self):
+        if self.payment:
+            return f"Payment {self.payment.number} - {self.get_document_type_display()}"
+        elif self.recipient:
+            return f"Recipient {self.recipient.number} - {self.get_document_type_display()}"
+        return f"Document - {self.get_document_type_display()}"
 
 
 class Payment(models.Model):
@@ -165,3 +211,4 @@ class Recipient(models.Model):
 
     def __str__(self):
         return f"Recipient #{self.number} - {self.amount} from {self.student}"
+

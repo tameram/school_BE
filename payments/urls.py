@@ -1,12 +1,17 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import NotReceivedRecipientList
 from .views import (
+    NotReceivedRecipientList,
     PaymentTypeViewSet,
     BankTransferDetailViewSet,
     ChequeDetailViewSet,
     PaymentViewSet, 
-    RecipientViewSet
+    RecipientViewSet,
+    upload_payment_document,
+    upload_recipient_document,
+    delete_payment_document,
+    delete_cheque_image,
+    payment_dashboard_stats,
 )
 
 router = DefaultRouter()
@@ -17,6 +22,19 @@ router.register('payments', PaymentViewSet, basename='payments')
 router.register('recipients', RecipientViewSet, basename='recipients')
 
 urlpatterns = [
-    path('recipients/not_received/', NotReceivedRecipientList.as_view(), name='not-received-recipients'),  # ✅ Fixed: Added .as_view()
+    # Basic endpoints
+    path('recipients/not_received/', NotReceivedRecipientList.as_view(), name='not-received-recipients'),
+    path('dashboard-stats/', payment_dashboard_stats, name='payment-dashboard-stats'),
+    
+    # Document management
+    path('documents/payment/<uuid:payment_id>/', upload_payment_document, name='upload_payment_document'),
+    path('documents/recipient/<uuid:recipient_id>/', upload_recipient_document, name='upload_recipient_document'),
+    path('documents/delete/<uuid:document_id>/', delete_payment_document, name='delete_payment_document'),
+    
+    # Cheque image management
+    path('cheques/<uuid:cheque_id>/delete-image/', delete_cheque_image, name='delete_cheque_image'),
+    
+    # Router URLs
     path('', include(router.urls)),
 ]
+
