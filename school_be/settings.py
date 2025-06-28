@@ -106,30 +106,41 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
-AWS_ACCESS_KEY_ID = 'AKIAR74NQJ3W6HKHLN67'
-AWS_SECRET_ACCESS_KEY = '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'
+AWS_ACCESS_KEY_ID = 'AKIAR74NQJ3WTTOHKRTS'
+AWS_SECRET_ACCESS_KEY = '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'
+AWS_S3_REGION_NAME = 'il-central-1'
+
+# Updated S3 settings for better compatibility
+AWS_S3_ENDPOINT_URL = f'https://s3.{AWS_S3_REGION_NAME}.amazonaws.com'
+
+# File Storage Settings - Key fixes here
+# AWS_DEFAULT_ACL = 'private'  # More explicit
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
+}
+
+# Critical fixes for the 403 error
+AWS_DEFAULT_ACL = 'public-read'        # Make files public
+AWS_QUERYSTRING_AUTH = False           # Don't use signed URLs
+AWS_S3_FILE_OVERWRITE = True          # Avoid existence checks
+AWS_S3_CUSTOM_DOMAIN = None           # Don't use custom domain for now
+
+# Your existing S3 settings should remain the same:
 AWS_STORAGE_BUCKET_NAME = 'daftar-noon'
 AWS_S3_REGION_NAME = 'il-central-1'
 AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
 
-# S3 File Storage Settings
-AWS_DEFAULT_ACL = None
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
-}
-AWS_S3_FILE_OVERWRITE = False
-AWS_QUERYSTRING_AUTH = True
-AWS_QUERYSTRING_EXPIRE = 3600  # 1 hour
+# Media files configuration
+DEFAULT_FILE_STORAGE = 'utils.storage_backends.MediaStorage'
+MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 
-AWS_S3_ENDPOINT_URL = f'https://s3.{AWS_S3_REGION_NAME}.amazonaws.com'
-
-# Use regional endpoint
+# Add these new settings to fix permissions issues
+AWS_S3_VERIFY = True
+AWS_S3_USE_SSL = True
 AWS_S3_ADDRESSING_STYLE = 'virtual'
 AWS_S3_SIGNATURE_VERSION = 's3v4'
 
-# Media files (uploads) configuration
-DEFAULT_FILE_STORAGE = 'utils.storage_backends.MediaStorage'
-MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+# Media files configuration
 
 
 MIDDLEWARE = [
@@ -210,7 +221,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+# STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.FileSystemFinder',

@@ -11,6 +11,9 @@ from settings_data.models import SchoolYear, SchoolFee
 from django.db import models
 from rest_framework.permissions import IsAuthenticated
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class StudentHistorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -145,12 +148,43 @@ class StudentSerializer(serializers.ModelSerializer):
         return data
 
     def get_attachment_url(self, obj):
-        """Generate secure URL for main attachment"""
-        if obj.attachment:
-            s3_manager = S3FileManager()
-            return s3_manager.generate_presigned_url(obj.attachment.name)
-        return None
-    
+        """
+        Generate URL for attachment with correct path handling
+        """
+        if not obj.attachment:
+            return None
+        
+        try:
+            # Method 1: Use Django's built-in URL generation (recommended)
+            url = obj.attachment.url
+            logger.info(f"Django generated URL for student {obj.id}: {url}")
+            return url
+            
+        except Exception as e:
+            logger.error(f"Error getting Django URL for student {obj.id}: {e}")
+            
+            # Method 2: Manual construction as fallback
+            try:
+                # obj.attachment.name already includes the full path from your upload_to function
+                # It should be something like: "test1/students/student/uuid/filename.png"
+                file_path = obj.attachment.name
+                
+                # Check if the path already includes 'media/' prefix
+                if not file_path.startswith('media/'):
+                    file_path = f"media/{file_path}"
+                
+                # Construct the full S3 URL
+                base_url = "https://daftar-noon.s3.il-central-1.amazonaws.com/"
+                manual_url = f"{base_url}{file_path}"
+                
+                logger.info(f"Manual URL for student {obj.id}: {manual_url}")
+                return manual_url
+                
+            except Exception as manual_error:
+                logger.error(f"Manual URL generation failed for student {obj.id}: {manual_error}")
+                return None
+
+
     def get_school_fees_by_year(self, student):
         fees = SchoolFee.objects.filter(student=student)
         return [

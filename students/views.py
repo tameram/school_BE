@@ -27,6 +27,10 @@ from django.db.models import Sum
 from decimal import Decimal
 from uuid import UUID
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class BusListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
@@ -101,7 +105,8 @@ class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
         )
         
         instance.delete()
-        
+
+    
 class BusRetrieveUpdateView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'id'
 
@@ -164,20 +169,64 @@ class StudentListCreateView(generics.ListCreateAPIView):
         return Student.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-        student = serializer.save(account=self.request.user.account, created_by=self.request.user)
-        log_activity(
-            user=self.request.user,
-            account=self.request.user.account,
-            note=f"تم إنشاء الطالب {student.first_name} {student.second_name}",
-            related_model='Student',
-            related_id=str(student.id)
-        )
-
-    def get_serializer_context(self):
-        """Add request context to serializer for file URL generation"""
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
+        try:
+            # First save without file if there's an attachment
+            attachment = serializer.validated_data.pop('attachment', None)
+            
+            # Create student without attachment first
+            student = serializer.save(
+                account=self.request.user.account, 
+                created_by=self.request.user
+            )
+            
+            # Handle file upload separately if provided
+            if attachment:
+                try:
+                    student.attachment = attachment
+                    student.save(update_fields=['attachment'])
+                except Exception as file_error:
+                    # Log the file error but don't fail the student creation
+                    logger.error(f"File upload failed for student {student.id}: {file_error}")
+                    # You could add a message here to inform the user
+                    pass
+            
+            # Log successful creation
+            log_activity(
+                user=self.request.user,
+                account=self.request.user.account,
+                note=f"تم إنشاء الطالب {student.first_name} {student.second_name}",
+                related_model='Student',
+                related_id=str(student.id)
+            )
+            
+        except Exception as e:
+            logger.error(f"Student creation error: {e}")
+            raise e
+            
+        def get_serializer_context(self):
+            """Add request context to serializer for file URL generation"""
+            context = super().get_serializer_context()
+            context['request'] = self.request
+            return context
+    
+    def handle_file_upload_safely(file, student_instance):
+        """
+        Helper function to handle file uploads with better error handling
+        """
+        if not file:
+            return None
+        
+        try:
+            # Save file to student instance
+            student_instance.attachment = file
+            student_instance.save()
+            return True
+        except Exception as e:
+            logger.error(f"File upload error for student {student_instance.id}: {e}")
+            # Clear the file field if upload failed
+            student_instance.attachment = None
+            student_instance.save()
+            raise Exception("File upload failed. Please check your file and try again.")
 
 
 class StudentRetrieveUpdateView(generics.RetrieveUpdateAPIView):

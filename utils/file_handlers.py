@@ -20,7 +20,7 @@ class CustomUploadPath:
         
         # Determine user type and ID based on instance
         if hasattr(instance, 'student') and instance.student:
-            user_id = str(instance.student.id)
+            user_id = str(instance.student.student_id)
             user_type = 'student'
         elif hasattr(instance, 'employee') and instance.employee:
             user_id = str(instance.employee.id)

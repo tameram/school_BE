@@ -2,6 +2,8 @@ from django.db import models
 import uuid
 from users.models import Account, CustomUser
 from utils.file_handlers import student_documents_path
+from utils.storage_backends import MediaStorage
+
 
 
 
@@ -68,8 +70,9 @@ class Student(models.Model):
     
     # File upload field for documents/images
     attachment = models.FileField(
-        upload_to=student_documents_path, 
-        null=True, 
+        upload_to=student_documents_path,
+        storage=MediaStorage(),  # ✅ This is the key change
+        null=True,
         blank=True,
         help_text="Student profile document (ID, photo, etc.)"
     )
