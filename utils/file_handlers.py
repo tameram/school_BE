@@ -74,28 +74,41 @@ class PaymentChequePath:
     """Dynamic path based on payment recipient type"""
     
     def __call__(self, instance, filename):
-        account_name = get_account_name(instance)
-        
-        # For ChequeDetail, we need to find the related payment
+        # For ChequeDetail instances, we need to get account from related objects
         if hasattr(instance, 'payments') and instance.payments.exists():
             # Get the first payment using this cheque
             payment = instance.payments.first()
+            account_name = get_account_name(payment)
         elif hasattr(instance, 'recipients') and instance.recipients.exists():
             # Get the first recipient using this cheque
             recipient = instance.recipients.first()
+            account_name = get_account_name(recipient)
             student_id = clean_name(recipient.student.student_id or recipient.student.id)
             recipient_number = recipient.number or 'unknown'
             ext = os.path.splitext(filename)[1]
             safe_filename = f"{recipient_number}{ext}"
             return f"{account_name}/students/{student_id}/recipient/{safe_filename}"
         else:
-            # Fallback for direct cheque upload
-            payment_number = getattr(instance, 'number', 'unknown')
+            # Fallback for direct cheque upload - try to get account from instance
+            if hasattr(instance, 'account'):
+                account_name = get_account_name(instance)
+            else:
+                account_name = 'default'
+            payment_number = getattr(instance, 'cheque_number', getattr(instance, 'id', 'unknown'))
             ext = os.path.splitext(filename)[1]
             safe_filename = f"{payment_number}{ext}"
             return f"{account_name}/generalPayments/{safe_filename}"
         
         # Handle payment-based routing
+        payment = instance.payments.first() if hasattr(instance, 'payments') and instance.payments.exists() else None
+        if not payment:
+            # Fallback
+            account_name = get_account_name(instance) if hasattr(instance, 'account') else 'default'
+            payment_number = getattr(instance, 'cheque_number', getattr(instance, 'id', 'unknown'))
+            ext = os.path.splitext(filename)[1]
+            safe_filename = f"{payment_number}{ext}"
+            return f"{account_name}/generalPayments/{safe_filename}"
+        
         payment_number = payment.number or 'unknown'
         ext = os.path.splitext(filename)[1]
         safe_filename = f"{payment_number}{ext}"
@@ -171,6 +184,6 @@ payment_cheque_path = PaymentChequePath()
 payment_documents_path = PaymentDocumentPath()
 logo_path = LogoPath()
 
-# Legacy compatibility - keep these for any existing imports
+# Legacy compatibility - keep these for existing imports
 receipt_documents_path = PaymentDocumentPath()
 general_documents_path = LogoPath()

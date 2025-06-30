@@ -7,7 +7,7 @@ from employees.models import Employee
 from utils.services import get_next_number
 from django.db import IntegrityError, transaction
 from users.models import Account, CustomUser
-from utils.file_handlers import payment_documents_path, receipt_documents_path
+from utils.file_handlers import payment_documents_path, payment_cheque_path
 from utils.storage_backends import MediaStorage
 
 
@@ -57,9 +57,9 @@ class ChequeDetail(models.Model):
     cheque_number = models.CharField(max_length=30, null=True, blank=True)
     cheque_date = models.DateField(null=True, blank=True)
     
-    # ✅ Updated to use S3 storage
+    # ✅ Updated to use payment_cheque_path which handles ChequeDetail instances properly
     cheque_image = models.ImageField(
-        upload_to=payment_documents_path,
+        upload_to=payment_cheque_path,
         storage=MediaStorage(),
         null=True, 
         blank=True,
@@ -118,7 +118,7 @@ class Payment(models.Model):
     authorized_payer = models.ForeignKey(AuthorizedPayer, on_delete=models.SET_NULL, null=True, blank=True)
     payment_type = models.CharField(max_length=100, null=True, blank=True)
     type = models.CharField(max_length=100, null=True, blank=True)
-    cheque = models.ForeignKey('ChequeDetail', on_delete=models.SET_NULL, null=True, blank=True)
+    cheque = models.ForeignKey('ChequeDetail', on_delete=models.SET_NULL, null=True, blank=True, related_name='payments')
 
     school_year = models.ForeignKey(
         'settings_data.SchoolYear',
@@ -211,4 +211,3 @@ class Recipient(models.Model):
 
     def __str__(self):
         return f"Recipient #{self.number} - {self.amount} from {self.student}"
-
