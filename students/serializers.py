@@ -270,7 +270,7 @@ class StudentSerializer(serializers.ModelSerializer):
 class StudentBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
-        fields = ['id', 'first_name', 'second_name', 'student_id', 'school_class']
+        fields = ['id', 'first_name', 'second_name', 'student_id', 'school_class', 'address']
 
 
 class BusSerializer(serializers.ModelSerializer):

@@ -66,6 +66,8 @@ class Student(models.Model):
     parent_phone_2 = models.CharField(max_length=20, null=True, blank=True)  # New optional phone field
     parent_email = models.EmailField(null=True, blank=True)
 
+    address = models.TextField(null=True, blank=True, help_text="عنوان")
+
     note = models.TextField(null=True, blank=True)
     
     # File upload field for documents/images
