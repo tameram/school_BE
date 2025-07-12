@@ -79,6 +79,114 @@ class NotReceivedRecipientList(ListAPIView):
         context['request'] = self.request
         return context
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def payments_with_cheques(request):
+    """
+    GET API endpoint that returns all payments that have cheque details
+    """
+    try:
+        account = request.user.account
+        
+        # Filter payments that have cheque details
+        payments_queryset = Payment.objects.filter(
+            account=account,
+            cheque__isnull=False  # Only payments with cheques
+        ).select_related(
+            'cheque',
+            'recipient_employee', 
+            'recipient_bus', 
+            'recipient_authorized',
+            'authorized_payer',
+            'school_year',
+            'created_by'
+        ).prefetch_related(
+            'documents'
+        ).order_by('-created_at')
+        
+        # Apply additional filters if provided
+        school_year_param = request.query_params.get('school_year')
+        if school_year_param == 'current':
+            active_year = SchoolYear.objects.filter(account=account, is_active=True).first()
+            if active_year:
+                payments_queryset = payments_queryset.filter(school_year=active_year)
+        elif school_year_param:
+            try:
+                payments_queryset = payments_queryset.filter(school_year_id=school_year_param)
+            except ValueError:
+                return Response({
+                    'error': 'معرف السنة الدراسية غير صحيح'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Date range filters
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        
+        if start_date:
+            try:
+                payments_queryset = payments_queryset.filter(date__gte=start_date)
+            except ValueError:
+                return Response({
+                    'error': 'تاريخ البداية غير صحيح. استخدم تنسيق YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        if end_date:
+            try:
+                payments_queryset = payments_queryset.filter(date__lte=end_date)
+            except ValueError:
+                return Response({
+                    'error': 'تاريخ النهاية غير صحيح. استخدم تنسيق YYYY-MM-DD'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Payment type filter
+        payment_type = request.query_params.get('payment_type')
+        if payment_type:
+            payments_queryset = payments_queryset.filter(payment_type__icontains=payment_type)
+        
+        # Search filter for cheque details
+        search = request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            payments_queryset = payments_queryset.filter(
+                Q(cheque__cheque_number__icontains=search) |
+                Q(cheque__bank_number__icontains=search) |
+                Q(cheque__account_number__icontains=search) |
+                Q(reason__icontains=search)
+            )
+        
+        # Debug logging
+        logger.info(f"🔍 Found {payments_queryset.count()} payments with cheques for account {account.id}")
+        
+        # Serialize the data
+        from .serializers import PaymentSerializer
+        serializer = PaymentSerializer(
+            payments_queryset, 
+            many=True, 
+            context={'request': request}
+        )
+        
+        # Calculate summary stats
+        total_amount = sum(float(payment.amount) for payment in payments_queryset)
+        cheques_with_images = payments_queryset.filter(cheque__cheque_image__isnull=False).count()
+        
+        # Return response with count and summary
+        return Response({
+            'count': payments_queryset.count(),
+            'results': serializer.data,
+            'summary': {
+                'total_payments': payments_queryset.count(),
+                'total_amount': total_amount,
+                'cheques_with_images': cheques_with_images,
+                'cheques_without_images': payments_queryset.count() - cheques_with_images
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error fetching payments with cheques: {e}")
+        return Response({
+            'error': 'حدث خطأ أثناء جلب الدفعات بالشيكات',
+            'details': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
@@ -205,6 +313,98 @@ class PaymentViewSet(viewsets.ModelViewSet):
         log_activity(self.request.user, self.request.user.account, f"تم حذف دفعة بمبلغ {instance.amount}", 'Payment', str(instance.id))
         instance.delete()
 
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def with_cheques(self, request):
+        """
+        Custom action to get only payments that have cheque details
+        URL: /payments/with_cheques/ (note the underscore, not hyphen)
+        """
+        # Start with base queryset and filter for cheques
+        queryset = self.get_queryset().filter(cheque__isnull=False)
+        
+        # Apply the same filters as the main queryset
+        school_year_param = request.query_params.get('school_year')
+        if school_year_param == 'current':
+            active_year = SchoolYear.objects.filter(
+                account=request.user.account, 
+                is_active=True
+            ).first()
+            if active_year:
+                queryset = queryset.filter(school_year=active_year)
+        elif school_year_param:
+            try:
+                queryset = queryset.filter(school_year_id=school_year_param)
+            except ValueError:
+                return Response({
+                    'error': 'معرف السنة الدراسية غير صحيح'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Additional filters
+        start_date = request.query_params.get('start_date')
+        end_date = request.query_params.get('end_date')
+        payment_type = request.query_params.get('payment_type')
+        search = request.query_params.get('search')
+        
+        if start_date:
+            try:
+                queryset = queryset.filter(date__gte=start_date)
+            except ValueError:
+                return Response({
+                    'error': 'تاريخ البداية غير صحيح'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        if end_date:
+            try:
+                queryset = queryset.filter(date__lte=end_date)
+            except ValueError:
+                return Response({
+                    'error': 'تاريخ النهاية غير صحيح'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        if payment_type:
+            queryset = queryset.filter(payment_type__icontains=payment_type)
+            
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(cheque__cheque_number__icontains=search) |
+                Q(cheque__bank_number__icontains=search) |
+                Q(cheque__account_number__icontains=search) |
+                Q(reason__icontains=search)
+            )
+        
+        # Order by creation date (newest first)
+        queryset = queryset.order_by('-created_at')
+        
+        # Debug logging
+        logger.info(f"🔍 PaymentViewSet.with_cheques found {queryset.count()} payments")
+        
+        # Paginate if needed
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        
+        # Add summary to response
+        total_amount = sum(float(payment.amount) for payment in queryset)
+        cheques_with_images = queryset.filter(cheque__cheque_image__isnull=False).count()
+        
+        response_data = serializer.data
+        if isinstance(response_data, list):
+            response_data = {
+                'count': queryset.count(),
+                'results': response_data,
+                'summary': {
+                    'total_payments': queryset.count(),
+                    'total_amount': total_amount,
+                    'cheques_with_images': cheques_with_images,
+                    'cheques_without_images': queryset.count() - cheques_with_images
+                }
+            }
+        
+        return Response(response_data)
 
 class RecipientViewSet(viewsets.ModelViewSet):
     serializer_class = RecipientSerializer

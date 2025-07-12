@@ -12,6 +12,7 @@ from .views import (
     delete_payment_document,
     delete_cheque_image,
     payment_dashboard_stats,
+    payments_with_cheques,          # Add this import
 )
 
 router = DefaultRouter()
@@ -26,6 +27,10 @@ urlpatterns = [
     path('recipients/not_received/', NotReceivedRecipientList.as_view(), name='not-received-recipients'),
     path('dashboard-stats/', payment_dashboard_stats, name='payment-dashboard-stats'),
     
+    # NEW: Cheque payments endpoints
+    path('with-cheques/', payments_with_cheques, name='payments-with-cheques'),
+
+    
     # Document management
     path('documents/payment/<uuid:payment_id>/', upload_payment_document, name='upload_payment_document'),
     path('documents/recipient/<uuid:recipient_id>/', upload_recipient_document, name='upload_recipient_document'),
@@ -37,4 +42,3 @@ urlpatterns = [
     # Router URLs
     path('', include(router.urls)),
 ]
-
