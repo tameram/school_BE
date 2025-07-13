@@ -193,6 +193,7 @@ class StudentSerializer(serializers.ModelSerializer):
                 "books_fee": f.books_fee,
                 "trans_fee": f.trans_fee,
                 "clothes_fee": f.clothes_fee,
+                "clothes_fee_paid": f.clothes_fee_paid,
                 "school_year": str(f.school_year.id) if f.school_year else None
             } for f in fees
         ]
@@ -241,6 +242,7 @@ class StudentSerializer(serializers.ModelSerializer):
                 'books_fee': fee.books_fee,
                 'trans_fee': fee.trans_fee,
                 'clothes_fee': fee.clothes_fee,
+                'clothes_fee_paid': fee.clothes_fee_paid,
                 'id': fee.id
             }
 
@@ -252,6 +254,7 @@ class StudentSerializer(serializers.ModelSerializer):
                     'books_fee': fee.books_fee,
                     'trans_fee': fee.trans_fee,
                     'clothes_fee': fee.clothes_fee,
+                    'clothes_fee_paid': fee.clothes_fee_paid,
                     'id': fee.id
                 }
 
@@ -262,6 +265,7 @@ class StudentSerializer(serializers.ModelSerializer):
                 'books_fee': fee.books_fee,
                 'trans_fee': fee.trans_fee,
                 'clothes_fee': fee.clothes_fee,
+                'clothes_fee_paid': fee.clothes_fee_paid,
                 'id': fee.id
             }
 

@@ -100,6 +100,7 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
                 books_fee=default_fee.books_fee,
                 trans_fee=default_fee.trans_fee,
                 clothes_fee=default_fee.clothes_fee,
+                clothes_fee_paid=default_fee.clothes_fee_paid,
                 account=self.request.user.account,
                 created_by=self.request.user
             ))
@@ -149,6 +150,125 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
 
+    @action(detail=False, methods=['post', 'put'], url_path='update-by-student')
+    def update_by_student(self, request):
+        """Update or create school fee for a specific student"""
+        print(f"🔥 Received request data: {request.data}")
+        
+        student_id = request.data.get('student')
+        school_year_id = request.data.get('school_year')
+        
+        print(f"📝 Student ID: {student_id}, School Year ID: {school_year_id}")
+        
+        if not student_id or not school_year_id:
+            return Response(
+                {"error": "student and school_year are required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Try to get existing school fee
+            print(f"🔍 Looking for existing fee with student={student_id}, school_year={school_year_id}, account={request.user.account.id}")
+            
+            school_fee = SchoolFee.objects.get(
+                account=request.user.account,
+                student_id=student_id,
+                school_year_id=school_year_id
+            )
+            print(f"✅ Found existing fee: {school_fee.id}")
+            
+            # Update existing
+            serializer = self.get_serializer(school_fee, data=request.data, partial=True)
+            action_type = "تم تعديل"
+            
+        except SchoolFee.DoesNotExist:
+            print("🆕 No existing fee found, creating new one")
+            
+            # Create new
+            serializer = self.get_serializer(data=request.data)
+            action_type = "تم إنشاء"
+        
+        except SchoolFee.MultipleObjectsReturned:
+            print("⚠️ Multiple fees found! This shouldn't happen with proper constraints")
+            
+            # Handle multiple records by getting the first one
+            school_fee = SchoolFee.objects.filter(
+                account=request.user.account,
+                student_id=student_id,
+                school_year_id=school_year_id
+            ).first()
+            
+            serializer = self.get_serializer(school_fee, data=request.data, partial=True)
+            action_type = "تم تعديل"
+        
+        print(f"🔧 Validating data with serializer...")
+        
+        if serializer.is_valid():
+            print(f"✅ Data is valid, saving...")
+            
+            school_fee = serializer.save(
+                account=request.user.account, 
+                created_by=request.user
+            )
+            
+            print(f"💾 Saved fee: ID={school_fee.id}, clothes_fee_paid={school_fee.clothes_fee_paid}")
+            
+            log_activity(
+                user=request.user,
+                account=request.user.account,
+                note=f"{action_type} رسوم مدرسية للطالب",
+                related_model='SchoolFee',
+                related_id=str(school_fee.id)
+            )
+            
+            response_data = serializer.data
+            print(f"📤 Returning response: {response_data}")
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            print(f"❌ Validation errors: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['patch'], url_path='toggle-clothes-payment')
+    def toggle_clothes_payment(self, request):
+        """Toggle clothes fee payment status for a specific student"""
+        student_id = request.data.get('student_id')
+        school_year_id = request.data.get('school_year_id')
+        clothes_fee_paid = request.data.get('clothes_fee_paid', False)
+        
+        if not student_id or not school_year_id:
+            return Response(
+                {"error": "student_id and school_year_id are required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            school_fee = SchoolFee.objects.get(
+                account=request.user.account,
+                student_id=student_id,
+                school_year_id=school_year_id
+            )
+            
+            school_fee.clothes_fee_paid = clothes_fee_paid
+            school_fee.save(update_fields=['clothes_fee_paid'])
+            
+            log_activity(
+                user=request.user,
+                account=request.user.account,
+                note=f"تم {'تأكيد' if clothes_fee_paid else 'إلغاء'} دفع رسوم الملابس للطالب {school_fee.student}",
+                related_model='SchoolFee',
+                related_id=str(school_fee.id)
+            )
+            
+            serializer = self.get_serializer(school_fee)
+            return Response(serializer.data)
+            
+        except SchoolFee.DoesNotExist:
+            return Response(
+                {"error": "School fee record not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
     @action(detail=False, methods=['get'], url_path='current-year-total')
     def current_year_total(self, request):
         account = request.user.account
@@ -195,6 +315,7 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                     'books_fee': 0.00,
                     'trans_fee': 0.00,
                     'clothes_fee': 0.00,
+                    'clothes_fee_paid': False,
                     'school_class': None,
                     'student': None,
                     'school_year': None,

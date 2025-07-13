@@ -50,6 +50,8 @@ class SchoolFee(models.Model):
     trans_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     clothes_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
+    clothes_fee_paid = models.BooleanField(default=False, null=True, blank=True)
+
     school_year = models.ForeignKey(
     'settings_data.SchoolYear',
     on_delete=models.SET_NULL,
