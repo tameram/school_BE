@@ -1,3 +1,5 @@
+# serializers.py - Simplified without UIPreferencesSerializer
+
 from datetime import datetime, time, timezone
 from pytz import timezone as pytz_timezone, UTC
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -12,12 +14,14 @@ logger = logging.getLogger(__name__)
 
 class AccountUpdateSerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField()
+    ui_preferences = serializers.SerializerMethodField()
     
     class Meta:
         model = Account
         fields = [
             'school_name', 'phone_number', 'email',
-            'address', 'logo', 'logo_url', 'start_school_date', 'end_school_date'
+            'address', 'logo', 'logo_url', 'start_school_date', 'end_school_date',
+            'ui_preferences'  # Only include ui_preferences, not the individual fields
         ]
     
     def get_logo_url(self, obj):
@@ -26,42 +30,35 @@ class AccountUpdateSerializer(serializers.ModelSerializer):
             return None
         
         try:
-            # Method 1: Use Django's built-in URL generation
             url = obj.logo.url
             logger.info(f"Django generated URL for account {obj.id}: {url}")
             return url
-            
         except Exception as e:
             logger.error(f"Error getting Django URL for account {obj.id}: {e}")
-            
-            # Method 2: Manual construction as fallback
             try:
                 file_path = obj.logo.name
-                
                 if not file_path.startswith('media/'):
                     file_path = f"media/{file_path}"
-                
                 base_url = "https://daftar-noon.s3.il-central-1.amazonaws.com/"
                 manual_url = f"{base_url}{file_path}"
-                
                 logger.info(f"Manual URL for account {obj.id}: {manual_url}")
                 return manual_url
-                
             except Exception as manual_error:
                 logger.error(f"Manual URL generation failed for account {obj.id}: {manual_error}")
                 return None
+    
+    def get_ui_preferences(self, obj):
+        """Get organized UI preferences"""
+        return obj.get_enabled_menu_items()
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
-        # STRICT: Check account exists before creating token
         if not user.account:
             raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
         
         token = super().get_token(user)
-
-        # Add custom claims
         token['username'] = user.username
         token['role'] = user.role
         token['account_id'] = user.account_id
@@ -69,27 +66,22 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         # Get current time in Israel timezone
         israel = pytz_timezone('Asia/Jerusalem')
         now_israel = datetime.now(israel)
-
-        # Localize end of day
         naive_end = datetime.combine(now_israel.date(), time(23, 59, 59))
         end_of_day_israel = israel.localize(naive_end)
         now_utc = now_israel.astimezone(UTC)
         end_utc = end_of_day_israel.astimezone(UTC)
-
-        # Set token expiration
         token.set_exp(from_time=now_utc, lifetime=end_utc - now_utc)
 
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)  # This sets self.user
+        data = super().validate(attrs)
         
-        # STRICT: Double-check account exists (redundant but safe)
         if not self.user.account:
             raise serializers.ValidationError("المستخدم غير مرتبط بحساب صالح. يرجى التواصل مع المسؤول.")
         
         full_name = f"{self.user.first_name} {self.user.last_name}".strip()
-        account = self.user.account  # Now guaranteed to exist
+        account = self.user.account
 
         data['user'] = {
             'id': self.user.id,
@@ -105,9 +97,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'address': account.address or '',
             'email': account.email or '',
             'phone_number': account.phone_number or '',
-            # ✅ Updated to use logo_url method with proper context
             'logo': self._get_logo_url(account),
         }
+        # Include UI preferences from database
+        data['ui_preferences'] = account.get_enabled_menu_items()
         return data
     
     def _get_logo_url(self, account):
@@ -119,7 +112,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             return account.logo.url
         except Exception as e:
             logger.error(f"Error getting logo URL for account {account.id}: {e}")
-            # Fallback to manual construction
             try:
                 file_path = account.logo.name
                 if not file_path.startswith('media/'):
@@ -127,7 +119,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 return f"https://daftar-noon.s3.il-central-1.amazonaws.com/{file_path}"
             except Exception:
                 return None
-    
+
 
 class MeSerializer(serializers.ModelSerializer):
     account = AccountUpdateSerializer()
@@ -165,4 +157,3 @@ class PasswordResetSerializer(serializers.Serializer):
         if len(value) < 8 or not any(c.isdigit() for c in value) or not any(c.isalpha() for c in value):
             raise serializers.ValidationError("كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على رقم وحرف")
         return value
-

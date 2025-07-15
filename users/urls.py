@@ -27,4 +27,3 @@ urlpatterns = [
     path('me/', MeView.as_view(), name='me'),
     path('users/', AccountUsersListView.as_view(), name='account-users'),
 ]
-

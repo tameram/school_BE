@@ -1,3 +1,5 @@
+# views.py - Simplified without UIPreferencesView
+
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import (
     CustomTokenObtainPairSerializer, 
@@ -17,7 +19,6 @@ from utils.s3_utils import S3FileManager
 import logging
 
 logger = logging.getLogger(__name__)
-
 User = get_user_model()
 
 
@@ -33,8 +34,7 @@ class CustomLoginView(TokenObtainPairView):
             return Response({'detail': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
 
         response = super().post(request, *args, **kwargs)
-
-        user = serializer.user  # use this instead of self.user
+        user = serializer.user
 
         if response.status_code == 200 and hasattr(user, 'account'):
             log_activity(
@@ -45,32 +45,18 @@ class CustomLoginView(TokenObtainPairView):
         return response
 
 
-class CustomTokenView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
-
-
 class AccountUsersListView(APIView):
-    """
-    Get all users that belong to the current user's account
-    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         try:
-            # Get all users from the same account
             users = User.objects.filter(
                 account=request.user.account,
                 is_active=True
             ).values(
-                'id', 
-                'username', 
-                'first_name', 
-                'last_name', 
-                'email', 
-                'role'
+                'id', 'username', 'first_name', 'last_name', 'email', 'role'
             )
             
-            # Format the response for frontend consumption
             formatted_users = []
             for user in users:
                 display_name = f"{user['first_name'] or ''} {user['last_name'] or ''}".strip()
@@ -107,10 +93,8 @@ class AccountUpdateView(APIView):
         account = request.user.account
         
         try:
-            # Handle logo file upload separately if needed
             logo_file = request.FILES.get('logo')
             
-            # Create serializer with context for URL generation
             serializer = AccountUpdateSerializer(
                 account, 
                 data=request.data, 
@@ -119,10 +103,8 @@ class AccountUpdateView(APIView):
             )
             
             if serializer.is_valid():
-                # Save the instance
                 updated_account = serializer.save()
                 
-                # Handle logo upload if provided
                 if logo_file:
                     try:
                         updated_account.logo = logo_file
@@ -130,9 +112,7 @@ class AccountUpdateView(APIView):
                         logger.info(f"✅ Successfully uploaded logo for account {updated_account.id}")
                     except Exception as logo_error:
                         logger.error(f"❌ Error uploading logo for account {updated_account.id}: {logo_error}")
-                        # Don't fail the entire operation, just log the error
                 
-                # Log the activity
                 log_activity(
                     user=request.user,
                     account=request.user.account,
@@ -141,7 +121,6 @@ class AccountUpdateView(APIView):
                     related_id=str(updated_account.id)
                 )
                 
-                # Return updated data with proper URLs
                 response_serializer = AccountUpdateSerializer(
                     updated_account, 
                     context={'request': request}
@@ -158,7 +137,6 @@ class AccountUpdateView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def patch(self, request):
-        """Handle partial updates (same as PUT but explicitly for PATCH requests)"""
         return self.put(request)
 
 
@@ -194,7 +172,6 @@ class AuthenticatedPasswordResetView(APIView):
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_account_logo(request):
-    """Delete the account logo"""
     try:
         account = request.user.account
         
@@ -203,12 +180,9 @@ def delete_account_logo(request):
                 'message': 'لا يوجد شعار للحذف'
             }, status=status.HTTP_200_OK)
         
-        # Delete from S3
         s3_manager = S3FileManager()
         if account.logo:
             s3_manager.delete_file(account.logo.name)
-            
-            # Clear the field
             account.logo = None
             account.save(update_fields=['logo'])
         
@@ -220,9 +194,7 @@ def delete_account_logo(request):
             related_id=str(account.id)
         )
         
-        return Response({
-            'message': 'تم حذف الشعار بنجاح'
-        }, status=status.HTTP_200_OK)
+        return Response({'message': 'تم حذف الشعار بنجاح'}, status=status.HTTP_200_OK)
         
     except Exception as e:
         return Response({
@@ -234,7 +206,6 @@ def delete_account_logo(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_account_logo(request):
-    """Upload a new logo for the account"""
     try:
         account = request.user.account
         logo_file = request.FILES.get('logo')
@@ -244,26 +215,22 @@ def upload_account_logo(request):
                 'error': 'لم يتم تحديد ملف الشعار'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate file type
         allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
         if logo_file.content_type not in allowed_types:
             return Response({
                 'error': 'نوع الملف غير مدعوم. يرجى استخدام JPG, PNG, أو GIF'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate file size (max 5MB)
         max_size = 5 * 1024 * 1024  # 5MB
         if logo_file.size > max_size:
             return Response({
                 'error': 'حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        # Delete old logo if exists
         if account.logo:
             s3_manager = S3FileManager()
             s3_manager.delete_file(account.logo.name)
         
-        # Save new logo
         account.logo = logo_file
         account.save(update_fields=['logo'])
         
@@ -275,7 +242,6 @@ def upload_account_logo(request):
             related_id=str(account.id)
         )
         
-        # Return updated account data
         serializer = AccountUpdateSerializer(account, context={'request': request})
         return Response({
             'message': 'تم رفع الشعار بنجاح',
@@ -293,14 +259,11 @@ def upload_account_logo(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def account_stats(request):
-    """Get account statistics"""
     try:
         account = request.user.account
         
-        # Get user counts
         user_count = User.objects.filter(account=account, is_active=True).count()
         
-        # Get logo info
         logo_info = {
             'has_logo': bool(account.logo),
             'logo_url': None
@@ -312,7 +275,6 @@ def account_stats(request):
             except Exception:
                 logo_info['logo_url'] = None
         
-        # Calculate account age
         account_age_days = None
         if account.join_date:
             from datetime import date
@@ -326,7 +288,8 @@ def account_stats(request):
             'is_active': account.is_active,
             'has_contact_info': bool(account.phone_number or account.email),
             'has_address': bool(account.address),
-            'school_dates_set': bool(account.start_school_date and account.end_school_date)
+            'school_dates_set': bool(account.start_school_date and account.end_school_date),
+            'ui_preferences': account.get_enabled_menu_items()
         }
         
         return Response(stats, status=status.HTTP_200_OK)
@@ -336,4 +299,3 @@ def account_stats(request):
             'error': 'حدث خطأ أثناء جلب إحصائيات الحساب',
             'details': str(e)
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
