@@ -45,19 +45,37 @@ class SchoolFee(models.Model):
     school_class = models.ForeignKey('students.SchoolClass', on_delete=models.SET_NULL, null=True, blank=True)
     student = models.ForeignKey('students.Student', on_delete=models.SET_NULL, null=True, blank=True)
 
-    school_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    books_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    trans_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    clothes_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    school_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    books_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    trans_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    clothes_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=0)
+    
+    # New discount fields
+    discount_percentage = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        null=True, 
+        blank=True, 
+        default=0,
+        help_text="Discount percentage (0-100)"
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        null=True, 
+        blank=True, 
+        default=0,
+        help_text="Fixed discount amount"
+    )
 
     clothes_fee_paid = models.BooleanField(default=False, null=True, blank=True)
 
     school_year = models.ForeignKey(
-    'settings_data.SchoolYear',
-    on_delete=models.SET_NULL,
-    null=True,
-    blank=True,
-    related_name="school_fees"
+        'settings_data.SchoolYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="school_fees"
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -65,6 +83,39 @@ class SchoolFee(models.Model):
 
     account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='school_fees', null=True, blank=True)
     created_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def get_total_fees_before_discount(self):
+        """Calculate total fees before applying discount"""
+        return (
+            (self.school_fee or 0) + 
+            (self.books_fee or 0) + 
+            (self.trans_fee or 0) + 
+            (self.clothes_fee or 0)
+        )
+
+    def get_discount_amount_calculated(self):
+        """Calculate the actual discount amount based on percentage and fixed amount"""
+        total_before_discount = self.get_total_fees_before_discount()
+        
+        # Calculate percentage discount
+        percentage_discount = 0
+        if self.discount_percentage:
+            percentage_discount = (total_before_discount * self.discount_percentage) / 100
+        
+        # Add fixed amount discount
+        fixed_discount = self.discount_amount or 0
+        
+        return percentage_discount + fixed_discount
+
+    def get_total_fees_after_discount(self):
+        """Calculate total fees after applying discount"""
+        total_before_discount = self.get_total_fees_before_discount()
+        discount_amount = self.get_discount_amount_calculated()
+        
+        final_total = total_before_discount - discount_amount
+        
+        # Ensure the final total is not negative
+        return max(final_total, 0)
 
     def __str__(self):
         if self.student:
@@ -81,3 +132,4 @@ class SchoolFee(models.Model):
                 condition=Q(school_class__isnull=True, student__isnull=True)  # Only one default per account
             )
         ]
+        

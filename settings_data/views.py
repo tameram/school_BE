@@ -7,8 +7,8 @@ from .models import EmployeeType, AuthorizedPayer, SchoolFee, SchoolYear
 from .serializers import EmployeeTypeSerializer, AuthorizedPayerSerializer, SchoolFeeSerializer, SchoolYearSerializer
 from logs.utils import log_activity
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Sum, F, ExpressionWrapper, DecimalField
-
+from django.db.models import Sum, F, ExpressionWrapper, DecimalField, Case, When, Value
+from django.db.models.functions import Greatest
 
 
 class EmployeeTypeViewSet(viewsets.ModelViewSet):
@@ -70,11 +70,12 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
     serializer_class = SchoolYearSerializer
     permission_classes = [IsAuthenticated]
     queryset = SchoolYear.objects.all()
+    
     def get_queryset(self):
         return SchoolYear.objects.filter(account=self.request.user.account)
 
     def perform_create(self, serializer):
-    # 1. Create the new school year
+        # 1. Create the new school year
         school_year = serializer.save(account=self.request.user.account, created_by=self.request.user)
 
         # 2. Get the default school fee
@@ -96,11 +97,13 @@ class SchoolYearViewSet(viewsets.ModelViewSet):
             fees_to_create.append(SchoolFee(
                 student=student,
                 school_year=school_year,
-                school_fee=default_fee.school_fee,
-                books_fee=default_fee.books_fee,
-                trans_fee=default_fee.trans_fee,
-                clothes_fee=default_fee.clothes_fee,
-                clothes_fee_paid=default_fee.clothes_fee_paid,
+                school_fee=default_fee.school_fee or 0,
+                books_fee=default_fee.books_fee or 0,
+                trans_fee=default_fee.trans_fee or 0,
+                clothes_fee=default_fee.clothes_fee or 0,
+                clothes_fee_paid=default_fee.clothes_fee_paid or False,
+                discount_percentage=default_fee.discount_percentage or 0,
+                discount_amount=default_fee.discount_amount or 0,
                 account=self.request.user.account,
                 created_by=self.request.user
             ))
@@ -211,7 +214,7 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                 created_by=request.user
             )
             
-            print(f"💾 Saved fee: ID={school_fee.id}, clothes_fee_paid={school_fee.clothes_fee_paid}")
+            print(f"💾 Saved fee: ID={school_fee.id}, discount_percentage={school_fee.discount_percentage}, discount_amount={school_fee.discount_amount}")
             
             log_activity(
                 user=request.user,
@@ -280,21 +283,59 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
         # Get non-archived student IDs
         student_ids = Student.objects.filter(is_archived=False).values_list('id', flat=True)
 
-        # Expression to calculate total fee per row
-        total_fee_expr = ExpressionWrapper(
+        # Calculate total fees before discount
+        total_fees_before_discount = ExpressionWrapper(
             F('school_fee') + F('books_fee') + F('trans_fee') + F('clothes_fee'),
             output_field=DecimalField()
         )
 
-        # Filter fees and sum total of all rows
-        total = (
-            SchoolFee.objects
-            .filter(account=account, school_year=active_year, student__in=student_ids)
-            .annotate(total_fee=total_fee_expr)
-            .aggregate(total_sum=Sum('total_fee'))
+        # Calculate percentage discount
+        percentage_discount = ExpressionWrapper(
+            (F('school_fee') + F('books_fee') + F('trans_fee') + F('clothes_fee')) * 
+            F('discount_percentage') / 100,
+            output_field=DecimalField()
         )
 
-        return Response({"total_school_fees": total['total_sum'] or 0})
+        # Calculate total discount (percentage + fixed amount)
+        total_discount = ExpressionWrapper(
+            percentage_discount + F('discount_amount'),
+            output_field=DecimalField()
+        )
+
+        # Calculate final total after discount (cannot be negative)
+        # Use Greatest to ensure the result is never negative
+        total_after_discount = ExpressionWrapper(
+            Greatest(
+                (F('school_fee') + F('books_fee') + F('trans_fee') + F('clothes_fee')) - 
+                (((F('school_fee') + F('books_fee') + F('trans_fee') + F('clothes_fee')) * F('discount_percentage') / 100) + F('discount_amount')),
+                Value(0)
+            ),
+            output_field=DecimalField()
+        )
+
+        # Get aggregated totals
+        aggregated_data = (
+            SchoolFee.objects
+            .filter(account=account, school_year=active_year, student__in=student_ids)
+            .annotate(
+                total_before_discount=total_fees_before_discount,
+                total_discount_amount=total_discount,
+                total_after_discount=total_after_discount
+            )
+            .aggregate(
+                total_before_discount_sum=Sum('total_before_discount'),
+                total_discount_sum=Sum('total_discount_amount'),
+                total_after_discount_sum=Sum('total_after_discount')
+            )
+        )
+
+        return Response({
+            "total_school_fees_before_discount": aggregated_data['total_before_discount_sum'] or 0,
+            "total_discount_amount": aggregated_data['total_discount_sum'] or 0,
+            "total_school_fees_after_discount": aggregated_data['total_after_discount_sum'] or 0,
+            # Keep backward compatibility
+            "total_school_fees": aggregated_data['total_after_discount_sum'] or 0
+        })
 
     @action(detail=False, methods=['get', 'put'], url_path='default')
     def default_fee(self, request):
@@ -316,11 +357,16 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                     'trans_fee': 0.00,
                     'clothes_fee': 0.00,
                     'clothes_fee_paid': False,
+                    'discount_percentage': 0.00,
+                    'discount_amount': 0.00,
                     'school_class': None,
                     'student': None,
                     'school_year': None,
                     'created_at': None,
-                    'year': None
+                    'year': None,
+                    'total_fees_before_discount': 0.00,
+                    'discount_amount_calculated': 0.00,
+                    'total_fees_after_discount': 0.00
                 }
                 return Response(default_data, status=status.HTTP_200_OK)
         
@@ -344,4 +390,51 @@ class SchoolFeeViewSet(viewsets.ModelViewSet):
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
+    @action(detail=False, methods=['post'], url_path='apply-discount')
+    def apply_discount(self, request):
+        """Apply discount to multiple students"""
+        student_ids = request.data.get('student_ids', [])
+        school_year_id = request.data.get('school_year_id')
+        discount_percentage = request.data.get('discount_percentage', 0)
+        discount_amount = request.data.get('discount_amount', 0)
+        
+        if not student_ids or not school_year_id:
+            return Response(
+                {"error": "student_ids and school_year_id are required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate discount values
+        if discount_percentage < 0 or discount_percentage > 100:
+            return Response(
+                {"error": "discount_percentage must be between 0 and 100"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if discount_amount < 0:
+            return Response(
+                {"error": "discount_amount cannot be negative"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        updated_count = SchoolFee.objects.filter(
+            account=request.user.account,
+            student_id__in=student_ids,
+            school_year_id=school_year_id
+        ).update(
+            discount_percentage=discount_percentage,
+            discount_amount=discount_amount
+        )
+        
+        log_activity(
+            user=request.user,
+            account=request.user.account,
+            note=f"تم تطبيق خصم {discount_percentage}% + {discount_amount} على {updated_count} طالب",
+            related_model='SchoolFee',
+            related_id=None
+        )
+        
+        return Response({
+            "message": f"Discount applied to {updated_count} students",
+            "updated_count": updated_count
+        })

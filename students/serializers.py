@@ -114,12 +114,10 @@ class StudentSerializer(serializers.ModelSerializer):
 
                 # Calculate total required fee
                 if school_fee:
-                    total_fee = sum([
-                        school_fee.school_fee or 0,
-                        school_fee.books_fee or 0,
-                        school_fee.trans_fee or 0,
-                        school_fee.clothes_fee or 0
-                    ])
+                    if fee:
+                        total_fee = fee.get_total_fees_after_discount()  # Uses discount-aware calculation
+                    else:
+                        total_fee = 0
                     
                     # Check if there are outstanding payments
                     outstanding_amount = total_fee - total_paid
@@ -201,7 +199,7 @@ class StudentSerializer(serializers.ModelSerializer):
     def get_payment_summary(self, student):
         active_year = SchoolYear.objects.filter(account=student.account, is_active=True).first()
         if not active_year:
-            return {'total_paid': 0, 'total_fee': 0}
+            return {'total_paid': 0, 'total_fee': 0, 'total_discount': 0, 'final_fee': 0}
 
         total_paid = Recipient.objects.filter(
             student=student, school_year=active_year
@@ -222,16 +220,24 @@ class StudentSerializer(serializers.ModelSerializer):
                 school_year=active_year
             ).first()
 
-        total_fee = sum([
-            school_fee.school_fee or 0,
-            school_fee.books_fee or 0,
-            school_fee.trans_fee or 0,
-            school_fee.clothes_fee or 0
-        ]) if school_fee else 0
+        if school_fee:
+            # USE THE NEW DISCOUNT-AWARE METHODS
+            total_fee_before_discount = school_fee.get_total_fees_before_discount()
+            total_discount = school_fee.get_discount_amount_calculated()
+            final_fee = school_fee.get_total_fees_after_discount()
+        else:
+            total_fee_before_discount = 0
+            total_discount = 0
+            final_fee = 0
 
         return {
             'total_paid': total_paid,
-            'total_fee': total_fee
+            'total_fee_before_discount': total_fee_before_discount,  # NEW
+            'total_discount': total_discount,                        # NEW
+            'final_fee': final_fee,                                  # NEW
+            'remaining_amount': max(final_fee - total_paid, 0),      # UPDATED
+            # Keep backward compatibility
+            'total_fee': final_fee  # This maintains existing frontend compatibility
         }
 
     def get_school_fees(self, student):
